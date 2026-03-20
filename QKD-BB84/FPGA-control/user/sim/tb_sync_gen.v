@@ -8,7 +8,7 @@ localparam PULSE_WIDTH = 2;
 localparam PERIOD     = CLK_FREQ / SYNC_FREQ;  // = 10
 localparam CLK_PERIOD = 10;  // ns per clock cycle
 
-reg  clk, rst_n;
+reg  clk, rst;
 wire sync_out;
 
 sync_gen #(
@@ -17,7 +17,7 @@ sync_gen #(
     .PULSE_WIDTH(PULSE_WIDTH)
 ) dut (
     .clk     (clk),
-    .rst_n   (rst_n),
+    .rst   (rst),
     .sync_out(sync_out)
 );
 
@@ -30,9 +30,9 @@ integer measured_high, measured_period;
 
 initial begin
     errors = 0;
-    rst_n  = 0;
+    rst  = 0;
     repeat(4) @(posedge clk);
-    rst_n = 1;
+    rst = 1;
 
     // Align to first rising edge
     @(posedge sync_out);

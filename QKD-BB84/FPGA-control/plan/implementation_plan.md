@@ -4,10 +4,11 @@
 
 本项目在 Artix-7 FPGA（xc7a35tfgg484-2，100MHz系统时钟）上实现BB84协议的硬件控制层，负责：
 
-- 产生可调频率的同步时钟信号（供TCSPC使用）
-- 通过UART接收Alice计算机发来的随机bit串（编码bit值和偏振基选择）
-- 根据接收到的数据驱动4路激光器输出
-- FIFO耗尽时通过UART TX通知上位机补充数据，并点亮LED指示等待状态
+- 产生可调频率的同步时钟信号（供TCSPC使用），并从复位起累计同步脉冲计数
+- 通过UART接收Alice计算机发来的单字节指令（编码bit值和偏振基选择）
+- 在下一个sync上升沿触发对应激光器发射单光子
+- 通过UART TX将该光子事件对应的32bit同步计数值发回上位机
+- 循环上述流程，直到收到'q'（0x71）停止
 
 ---
 
@@ -18,37 +19,104 @@ top.v  （顶层模块）
 ├── sync_gen.v       同步信号发生器
 ├── uart_rx.v        UART接收器
 ├── uart_tx.v        UART发送器
-├── data_buffer.v    数据缓冲区（FIFO）
 └── laser_ctrl.v     激光器控制器
 ```
 
+`data_buffer.v`（FIFO）已移除，改为严格的请求-响应协议。
+
 ### 2.1 顶层模块 `top.v`
 
-负责连接各子模块，管理全局复位，暴露所有外部IO引脚。
+负责连接各子模块，管理全局复位，暴露所有外部IO引脚，并实现主控FSM和sync计数器。
 
 **端口：**
 
 | 信号           | 方向   | 说明                    |
 | -------------- | ------ | ----------------------- |
 | `clk`        | input  | 100MHz系统时钟          |
-| `rst_n`      | input  | 异步低有效复位          |
+| `rst`        | input  | 异步低有效复位          |
 | `uart_rx`    | input  | UART数据输入            |
 | `uart_tx`    | output | UART数据输出            |
 | `sync_out`   | output | 同步信号输出（至TCSPC） |
 | `laser[3:0]` | output | 4路激光器控制信号       |
-| `led_empty`  | output | FIFO空指示LED           |
+| `led_empty`  | output | 状态指示LED（停止时亮） |
+
+**参数（移除FIFO_DEPTH和SYNC_DIV）：**
+
+| 参数                  | 默认值      | 说明              |
+| --------------------- | ----------- | ----------------- |
+| `CLK_FREQ`          | 100_000_000 | 系统时钟频率 (Hz) |
+| `SYNC_FREQ`         | 1_000_000   | 同步信号频率 (Hz) |
+| `SYNC_PULSE_WIDTH`  | 10          | 同步脉冲宽度（周期数）|
+| `BAUD_RATE`         | 115_200     | UART波特率        |
+| `LASER_PULSE_WIDTH` | 10          | 激光脉冲宽度（周期数）|
+
+**sync计数器：**
+
+从复位起，每个`sync_out`上升沿加1，自由运行的32bit计数器：
+
+```verilog
+reg        sync_prev;
+wire       sync_rise = sync_out & ~sync_prev;
+reg [31:0] sync_cnt;
+
+always @(posedge clk or negedge rst) begin
+    if (!rst) begin
+        sync_prev <= 0;
+        sync_cnt  <= 0;
+    end else begin
+        sync_prev <= sync_out;
+        if (sync_rise) sync_cnt <= sync_cnt + 1;
+    end
+end
+```
+
+**主控FSM（7状态）：**
+
+```
+S_WAIT_RX   → 等待rx_valid
+S_CHECK_Q   → 检查是否为'q'(0x71)
+S_WAIT_SYNC → 等待sync_rise
+S_FIRE      → 触发激光（fire=1，持续1周期）
+S_TX_LOAD   → 发送当前字节（tx_start=1，持续1周期）
+S_TX_WAIT   → 等待tx_busy下降沿
+S_STOPPED   → 停止状态（laser全0，不再TX）
+```
+
+**状态转移：**
+
+| 当前状态 | 条件 | 下一状态 | 动作 |
+|---|---|---|---|
+| S_WAIT_RX | rx_valid | S_CHECK_Q | 锁存rx_data → data_latch |
+| S_CHECK_Q | data_latch==0x71 | S_STOPPED | — |
+| S_CHECK_Q | else | S_WAIT_SYNC | — |
+| S_WAIT_SYNC | sync_rise | S_FIRE | 锁存sync_cnt → cnt_latch |
+| S_FIRE | always | S_TX_LOAD | fire=1（1周期）; byte_idx=0 |
+| S_TX_LOAD | always | S_TX_WAIT | tx_start=1（1周期），tx_data=cnt_latch对应字节 |
+| S_TX_WAIT | tx_was_busy && ~tx_busy && byte_idx==3 | S_WAIT_RX | — |
+| S_TX_WAIT | tx_was_busy && ~tx_busy && byte_idx<3 | S_TX_LOAD | byte_idx++ |
+| S_TX_WAIT | tx_busy | S_TX_WAIT | tx_was_busy=1 |
+| S_STOPPED | always | S_STOPPED | — |
+
+**4字节发送顺序（大端序）：**
+
+```
+byte_idx 0 → cnt_latch[31:24]
+byte_idx 1 → cnt_latch[23:16]
+byte_idx 2 → cnt_latch[15:8]
+byte_idx 3 → cnt_latch[7:0]
+```
+
+**LED逻辑：**
+
+```verilog
+assign led_empty = (state == S_STOPPED);  // 停止时LED亮
+```
 
 ---
 
 ### 2.2 同步信号发生器 `sync_gen.v`
 
-产生可调频率的同步脉冲，作为整个系统的时间基准。
-
-**设计要点：**
-
-- 使用可编程分频计数器，分频系数由参数 `SYNC_DIV` 决定
-- 输出为占空比50%的方波，或可配置为窄脉冲（便于TCSPC触发）
-- 分频系数可通过顶层参数静态配置（后续可扩展为UART动态配置）
+产生可调频率的同步脉冲，作为整个系统的时间基准。（无变化）
 
 **参数：**
 
@@ -67,26 +135,14 @@ top.v  （顶层模块）
 
 ### 2.3 UART发送器 `uart_tx.v`
 
-当FIFO变为空时，向上位机发送1字节通知，告知可以开始下一轮数据传输。
+每次光子事件后，向上位机发送4字节（32bit大端序sync计数值）。（模块本身无变化，触发逻辑移至top.v FSM）
 
 **参数：**
 
 | 参数          | 默认值      | 说明              |
 | ------------- | ----------- | ----------------- |
 | `CLK_FREQ`  | 100_000_000 | 系统时钟频率 (Hz) |
-| `BAUD_RATE` | 115_200     | 波特率（与RX一致）|
-
-**协议格式（每帧8N1）：** 与 `uart_rx.v` 相同。
-
-**通知字节约定：**
-
-发送固定字节 `0x52`（ASCII `'R'`，表示 Ready），上位机收到后开始发送下一批数据。
-
-**触发逻辑（在顶层实现）：**
-
-- 检测 `fifo_empty` 的上升沿（即FIFO从非空变为空的瞬间）
-- 触发 `uart_tx` 发送一次通知字节
-- 发送期间若再次触发，忽略（`uart_tx` 的 `tx_busy` 信号为高时不重复发送）
+| `BAUD_RATE` | 115_200     | 波特率            |
 
 **端口：**
 
@@ -101,7 +157,7 @@ top.v  （顶层模块）
 
 ### 2.4 UART接收器 `uart_rx.v`
 
-接收来自Alice计算机的串行数据。
+接收来自Alice计算机的串行数据。（无变化）
 
 **参数：**
 
@@ -112,16 +168,11 @@ top.v  （顶层模块）
 
 **协议格式（每帧8N1）：**
 
-- 1 bit起始位
-- 8 bit数据
-- 无校验位
-- 1 bit停止位
+- 1 bit起始位 / 8 bit数据 / 无校验位 / 1 bit停止位
 
-**数据编码约定（上位机与FPGA约定）：**
+**数据编码约定：**
 
-每次发送1字节，编码当前时隙的发送信息。
-
-实际上4路激光器与偏振态一一对应，因此1字节中只需2bit有效信息：
+每次发送1字节，只有低2bit有效：
 
 | `data[1]`（基选择） | `data[0]`（bit值） | 激活激光器 | 偏振态    |
 | --------------------- | -------------------- | ---------- | --------- |
@@ -130,6 +181,8 @@ top.v  （顶层模块）
 | 1                     | 0                    | laser[2]   | +45°     |
 | 1                     | 1                    | laser[3]   | -45°     |
 
+特殊字节：`0x71`（'q'）表示停止。
+
 **输出信号：**
 
 - `rx_data[7:0]`：接收到的字节
@@ -137,92 +190,64 @@ top.v  （顶层模块）
 
 ---
 
-### 2.5 数据缓冲区 `data_buffer.v`
+### 2.5 激光器控制器 `laser_ctrl.v`
 
-在UART接收速率与激光器发射速率之间解耦，使用同步FIFO实现。
-
-**规格：**
-
-| 参数           | 值  | 说明                |
-| -------------- | --- | ------------------- |
-| `DATA_WIDTH` | 8    | 数据位宽             |
-| `DEPTH`      | 1024 | FIFO深度（1024字节） |
-
-**端口：**
-
-| 信号        | 方向   | 说明                            |
-| ----------- | ------ | ------------------------------- |
-| `wr_en`   | input  | 写使能（来自uart_rx的rx_valid） |
-| `wr_data` | input  | 写数据                          |
-| `rd_en`   | input  | 读使能（来自laser_ctrl）        |
-| `rd_data` | output | 读数据                          |
-| `empty`   | output | FIFO空标志                      |
-| `full`    | output | FIFO满标志                      |
-
-**实现方式：** 使用Verilog寄存器数组实现同步FIFO，读写指针各一个，避免使用Xilinx原语以保持可移植性。
-
----
-
-### 2.6 激光器控制器 `laser_ctrl.v`
-
-以同步信号为节拍，从FIFO中读取数据并驱动4路激光器。
-
-**设计要点：**
-
-- 以 `sync_out` 的上升沿计数，每 `SYNC_DIV` 个同步周期触发一次光子时隙（可配置）
-- 每个时隙开始时从FIFO读取1字节，解码后激活对应激光器
-- 激光器脉冲宽度可配置（参数 `LASER_PULSE_WIDTH`，单位：时钟周期）
-- 若FIFO为空，则所有激光器保持低电平（不发射）
+接收fire脉冲和激光选择信号，驱动对应激光器输出固定宽度脉冲。（去掉FIFO接口，改为直接fire触发）
 
 **参数：**
 
-| 参数                  | 默认值 | 说明                                         |
-| --------------------- | ------ | -------------------------------------------- |
-| `SYNC_DIV`          | 1      | 每隔几个同步周期发射一个时隙（1=每周期发射） |
-| `LASER_PULSE_WIDTH` | 10     | 激光脉冲宽度（时钟周期数）                   |
+| 参数                  | 默认值 | 说明                       |
+| --------------------- | ------ | -------------------------- |
+| `LASER_PULSE_WIDTH` | 10     | 激光脉冲宽度（时钟周期数） |
 
-**内部逻辑：**
+**端口：**
 
-- 维护一个同步脉冲计数器 `sync_cnt`，每个 `sync_out` 上升沿加1
-- 当 `sync_cnt == SYNC_DIV - 1` 时触发一次时隙，`sync_cnt` 清零
-- 触发条件满足时进入 READ 状态，否则保持 IDLE
-- `DRIVE` 状态期间 `sync_cnt` 继续正常计数（不暂停），确保时隙节拍不被打乱
+| 信号         | 方向   | 说明                          |
+| ------------ | ------ | ----------------------------- |
+| `clk`      | input  | 系统时钟                      |
+| `rst`      | input  | 异步低有效复位                |
+| `laser_sel`| input  | 激光器选择 [1:0]（来自rx_data[1:0]）|
+| `fire`     | input  | 触发脉冲（1个时钟周期）       |
+| `laser`    | output | 4路激光器控制信号 [3:0]       |
+| `busy`     | output | 脉冲输出中标志                |
 
-**状态机（3状态）：**
+**状态机（2状态）：**
 
 ```
-IDLE ──(触发 & !empty)──> READ ──(1周期)──> DRIVE ──(脉冲结束)──> IDLE
-     ──(触发 & empty)───> IDLE（跳过，不发射）
-```
+S_IDLE: laser=0, busy=0
+        fire=1 → 锁存laser_sel, pulse_cnt=0 → S_DRIVE
 
-- `IDLE`：等待触发条件（sync_cnt 达到 SYNC_DIV-1）
-- `READ`：发出 `rd_en`，锁存 `rd_data`
-- `DRIVE`：根据锁存数据拉高对应 `laser[i]`，计数脉冲宽度后归零；`sync_cnt` 同步继续计数
+S_DRIVE: 根据锁存sel驱动one-hot laser, busy=1
+         pulse_cnt++
+         pulse_cnt == LASER_PULSE_WIDTH-1 → laser=0 → S_IDLE
+```
 
 **参数约束：**
 
-`DRIVE` 状态持续 `LASER_PULSE_WIDTH` 个时钟周期，期间 `sync_cnt` 需能完成计数而不产生新触发，因此要求：
-
 ```
-LASER_PULSE_WIDTH < CLK_FREQ / SYNC_FREQ * SYNC_DIV
+LASER_PULSE_WIDTH < CLK_FREQ / SYNC_FREQ
 ```
 
-即激光脉冲宽度（时钟周期数）须小于一个发射时隙对应的时钟周期数。默认参数下该约束自动满足（10 周期 < 100 周期，见第5节）。
+默认参数下自动满足（10周期 < 100周期）。
 
 ---
 
 ## 3. 时序关系
 
 ```
-sync_out  ─┐  ┌──┐  ┌──┐  ┌──
-           └──┘  └──┘  └──┘
-                │     │     │
-laser_ctrl      ▼     ▼     ▼   （每个sync上升沿读取一个FIFO条目）
-laser[i]   ──┐┌─┐ ┌─┐ ┌─┐
-             └┘ └─┘ └─┘ └─
+uart_rx   ──[byte]──────────────────────────────────────────
+                   │
+top FSM            ▼ S_WAIT_SYNC
+sync_out  ─┐  ┌──┐  ┌──┐
+           └──┘  └──┘  └──
+                      │
+top FSM               ▼ S_FIRE → S_TX_LOAD → S_TX_WAIT(×4)
+laser[i]              ┌─┐
+                      └─┘ (LASER_PULSE_WIDTH周期)
+uart_tx               ────[B3][B2][B1][B0]──── (4字节大端序sync计数)
 ```
 
-激光脉冲在同步脉冲后延迟1~2个时钟周期（READ状态延迟），脉冲宽度由 `LASER_PULSE_WIDTH` 决定，需小于同步周期。
+每次光子事件：收到字节 → 等待下一sync上升沿 → 触发激光 → 发回4字节sync计数。
 
 ---
 
@@ -230,40 +255,35 @@ laser[i]   ──┐┌─┐ ┌─┐ ┌─┐
 
 每个模块配备独立 testbench，使用缩短的时钟/波特率参数加速仿真。
 
-### 4.1 `tb_sync_gen.v`
+### 4.1 `tb_sync_gen.v`（无变化）
 
 - 实例化 `sync_gen`，使用小参数（如 `CLK_FREQ=100, SYNC_FREQ=10, PULSE_WIDTH=2`）
 - 验证：`sync_out` 周期正确、脉冲宽度正确
 
-### 4.2 `tb_uart_rx.v`
+### 4.2 `tb_uart_rx.v`（无变化）
 
-- 用任务 `send_byte(data)` 模拟串口发送：手动拉低起始位，逐位输出，拉高停止位
+- 用任务 `send_byte(data)` 模拟串口发送
 - 验证：`rx_valid` 在停止位后一周期拉高，`rx_data` 值正确
-- 测试多字节连续接收
 
-### 4.3 `tb_uart_tx.v`
+### 4.3 `tb_uart_tx.v`（无变化）
 
-- 脉冲 `tx_start`，采样 `uart_tx` 输出，逐位验证起始位、数据位、停止位
-- 验证 `tx_busy` 在发送期间保持高电平，发送完成后归低
-- 测试 `tx_busy` 期间再次触发 `tx_start` 不产生干扰
+- 脉冲 `tx_start`，采样 `uart_tx` 输出，逐位验证
+- 验证 `tx_busy` 行为
 
-### 4.4 `tb_laser_ctrl.v`
+### 4.4 `tb_laser_ctrl.v`（更新）
 
-- 预填 FIFO 数据（通过直接驱动 `fifo_data` 和 `fifo_empty`）
-- 产生 `sync_in` 脉冲序列，验证：
-  - 每 `SYNC_DIV` 个脉冲触发一次激光
-  - `laser` 输出与 `data[1:0]` 编码一致
-  - `DRIVE` 期间 `sync_cnt` 继续计数（不漏触发）
-  - FIFO 空时激光保持低电平
+- 直接驱动 `laser_sel` 和 `fire` 脉冲（无FIFO信号）
+- 验证：`laser` 输出与 `laser_sel` 编码一致，`busy` 信号正确
+- 验证脉冲宽度为 `LASER_PULSE_WIDTH` 周期
 
-### 4.5 `tb_top.v`
+### 4.5 `tb_top.v`（重写）
 
 - 顶层集成仿真，使用缩短参数（`BAUD_RATE` 调高、`SYNC_FREQ` 调低）
-- 流程：
-  1. 通过 `uart_rx` 发送若干字节填充 FIFO
-  2. 产生 `sync_out` 脉冲，观察激光依次触发
-  3. FIFO 耗尽后验证 `led_empty` 拉高、`uart_tx` 发出 `0x52`
-  4. 再次发送数据，验证 `led_empty` 熄灭
+- 测试流程：
+  1. Reset
+  2. 发送字节 `0x00` → 等待sync脉冲触发 → 接收4字节sync计数值，验证正确
+  3. 重复发送 `0x01`, `0x02`, `0x03`，验证对应激光器触发
+  4. 发送 `0x71`（'q'）→ 验证激光全灭、无TX输出、`led_empty` 拉高
 
 ---
 
@@ -276,18 +296,17 @@ FPGA-control/
 │   └── implementation_plan.md      ← 本文件
 ├── user/
 │   ├── src/
-│   │   ├── top.v                   顶层模块
+│   │   ├── top.v                   顶层模块（含主控FSM和sync计数器）
 │   │   ├── sync_gen.v              同步信号发生器
 │   │   ├── uart_rx.v               UART接收器
 │   │   ├── uart_tx.v               UART发送器
-│   │   ├── data_buffer.v           数据缓冲FIFO
-│   │   └── laser_ctrl.v            激光器控制器
+│   │   └── laser_ctrl.v            激光器控制器（fire触发，无FIFO）
 │   ├── sim/
-│   │   ├── tb_top.v                顶层仿真testbench
+│   │   ├── tb_top.v                顶层仿真testbench（重写）
 │   │   ├── tb_sync_gen.v           同步模块仿真
 │   │   ├── tb_uart_rx.v            UART接收仿真
 │   │   ├── tb_uart_tx.v            UART发送仿真
-│   │   └── tb_laser_ctrl.v         激光控制仿真
+│   │   └── tb_laser_ctrl.v         激光控制仿真（更新）
 │   └── data/
 │       └── top.xdc                 引脚约束文件
 └── prj/                            Vivado工程目录
@@ -295,19 +314,19 @@ FPGA-control/
 
 ---
 
-## 5. 关键参数汇总
+## 6. 关键参数汇总
 
 | 参数         | 值                   | 备注                |
 | ------------ | -------------------- | ------------------- |
 | 系统时钟     | 100 MHz              | xc7a35tfgg484-2     |
 | 同步信号频率 | 1 MHz（可调）        | 对应1μs时隙间隔    |
 | UART波特率   | 115200 bps           | 标准波特率          |
-| FIFO深度     | 1024 字节            | 约1024个时隙的预存量 |
 | 激光脉冲宽度 | 10个时钟周期 = 100ns | 需小于同步周期1μs  |
+| sync计数器   | 32bit，从复位起累计  | 大端序发回上位机    |
 
 ---
 
-## 6. 约束说明
+## 7. 约束说明
 
 XDC文件需约束以下信号：
 
@@ -322,19 +341,13 @@ XDC文件需约束以下信号：
 
 ---
 
-## 7. LED 与 TX 通知逻辑
+## 8. 协议约定
 
-两个功能均直接在顶层 `top.v` 中实现，无需独立模块。
+上位机与FPGA通信协议（严格请求-响应）：
 
-**LED 逻辑：**
+1. 上位机发送1字节：`data[1:0]` 编码激光器选择，其余bit忽略
+2. FPGA在下一个sync上升沿触发激光，然后发回4字节（大端序32bit sync计数值）
+3. 上位机收到4字节后，可发送下一字节
+4. 上位机发送 `0x71`（'q'）时，FPGA停止工作（复位前不再响应）
 
-- `led_empty` 直接连接 `fifo_empty` 信号
-- FIFO 空时 LED 亮，FIFO 非空时 LED 灭
-- 无需额外逻辑，组合赋值即可
-
-**TX 通知逻辑：**
-
-- 对 `fifo_empty` 做边沿检测，检测上升沿（空变非空的反向，即非空变空）
-- 具体：用寄存器打一拍 `fifo_empty_r`，当 `fifo_empty & ~fifo_empty_r` 时产生单周期脉冲
-- 该脉冲作为 `tx_start`，同时将 `tx_data` 固定为 `8'h52`（`'R'`）
-- 若 `tx_busy` 为高（上一次通知尚未发完），则本次脉冲被忽略（不重发）
+**注意：** S_WAIT_SYNC期间若有新UART字节到达，将被丢弃。协议保证上位机在收到4字节响应前不发送下一字节。

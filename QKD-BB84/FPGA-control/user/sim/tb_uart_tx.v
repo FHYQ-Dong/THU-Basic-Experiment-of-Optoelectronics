@@ -6,7 +6,7 @@ localparam CLK_FREQ  = 100_000_000;
 localparam BAUD_RATE = 10_000_000;
 localparam CLKS_PER_BIT = CLK_FREQ / BAUD_RATE;  // = 10
 
-reg  clk, rst_n;
+reg  clk, rst;
 reg  [7:0] tx_data;
 reg        tx_start;
 wire       tx_busy;
@@ -17,7 +17,7 @@ uart_tx #(
     .BAUD_RATE(BAUD_RATE)
 ) dut (
     .clk     (clk),
-    .rst_n   (rst_n),
+    .rst   (rst),
     .tx_data (tx_data),
     .tx_start(tx_start),
     .tx_busy (tx_busy),
@@ -49,11 +49,11 @@ reg [7:0] received;
 
 initial begin
     errors   = 0;
-    rst_n    = 0;
+    rst    = 0;
     tx_start = 0;
     tx_data  = 0;
     repeat(4) @(posedge clk);
-    rst_n = 1;
+    rst = 1;
     repeat(2) @(posedge clk);
 
     // ── Test 1: send 0xA5 ────────────────────────────────────────────────

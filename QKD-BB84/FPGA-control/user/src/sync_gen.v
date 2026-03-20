@@ -6,7 +6,7 @@ module sync_gen #(
     parameter PULSE_WIDTH = 10           // Pulse width in clock cycles
 ) (
     input  wire clk,
-    input  wire rst_n,
+    input  wire rst,
     output wire sync_out
 );
 
@@ -14,8 +14,8 @@ localparam PERIOD = CLK_FREQ / SYNC_FREQ;  // Clock cycles per sync period
 
 reg [$clog2(PERIOD)-1:0] cnt;
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
+always @(posedge clk) begin
+    if (rst)
         cnt <= 0;
     else if (cnt == PERIOD - 1)
         cnt <= 0;

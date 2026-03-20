@@ -5,7 +5,7 @@ module uart_rx #(
     parameter BAUD_RATE = 115_200      // Baud rate
 ) (
     input  wire       clk,
-    input  wire       rst_n,
+    input  wire       rst,
     input  wire       uart_rx,
     output reg  [7:0] rx_data,
     output reg        rx_valid
@@ -31,8 +31,8 @@ always @(posedge clk) begin
     rx_sync1 <= rx_sync0;
 end
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+always @(posedge clk) begin
+    if (rst) begin
         state    <= S_IDLE;
         baud_cnt <= 0;
         bit_idx  <= 0;

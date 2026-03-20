@@ -4,10 +4,9 @@
 
 本项目在 Artix-7 FPGA（xc7a35tfgg484-2，100MHz系统时钟）上实现BB84协议的硬件控制层，负责：
 
-- 产生可调频率的同步时钟信号（供TCSPC使用），并从复位起累计同步脉冲计数
+- 产生可调频率的同步时钟信号（供TCSPC使用）
 - 通过UART接收Alice计算机发来的单字节指令（编码bit值和偏振基选择）
 - 在下一个sync上升沿触发对应激光器发射单光子
-- 通过UART TX将该光子事件对应的32bit同步计数值发回上位机
 - 循环上述流程，直到收到'q'（0x71）停止
 
 ---
@@ -18,29 +17,28 @@
 top.v  （顶层模块）
 ├── sync_gen.v       同步信号发生器
 ├── uart_rx.v        UART接收器
-├── uart_tx.v        UART发送器
 └── laser_ctrl.v     激光器控制器
 ```
 
-`data_buffer.v`（FIFO）已移除，改为严格的请求-响应协议。
+`data_buffer.v`（FIFO）和 `uart_tx.v`（UART发送器）已移除。
 
 ### 2.1 顶层模块 `top.v`
 
-负责连接各子模块，管理全局复位，暴露所有外部IO引脚，并实现主控FSM和sync计数器。
+负责连接各子模块，管理全局复位，暴露所有外部IO引脚，并实现主控FSM。
 
 **端口：**
 
-| 信号           | 方向   | 说明                    |
-| -------------- | ------ | ----------------------- |
-| `clk`        | input  | 100MHz系统时钟          |
-| `rst`        | input  | 异步低有效复位          |
-| `uart_rx`    | input  | UART数据输入            |
-| `uart_tx`    | output | UART数据输出            |
-| `sync_out`   | output | 同步信号输出（至TCSPC） |
-| `laser[3:0]` | output | 4路激光器控制信号       |
-| `led_empty`  | output | 状态指示LED（停止时亮） |
+| 信号           | 方向   | 说明                        |
+| -------------- | ------ | --------------------------- |
+| `clk`        | input  | 100MHz系统时钟              |
+| `rst`        | input  | 异步低有效复位              |
+| `uart_rx`    | input  | UART数据输入                |
+| `sync_out`   | output | 同步信号输出（至TCSPC）     |
+| `laser[3:0]` | output | 4路激光器控制信号           |
+| `laser_en`   | output | 激光器使能（任一laser为1时为1）|
+| `led_empty`  | output | 状态指示LED（停止时亮）     |
 
-**参数（移除FIFO_DEPTH和SYNC_DIV）：**
+**参数：**
 
 | 参数                  | 默认值      | 说明              |
 | --------------------- | ----------- | ----------------- |
@@ -50,36 +48,13 @@ top.v  （顶层模块）
 | `BAUD_RATE`         | 115_200     | UART波特率        |
 | `LASER_PULSE_WIDTH` | 10          | 激光脉冲宽度（周期数）|
 
-**sync计数器：**
-
-从复位起，每个`sync_out`上升沿加1，自由运行的32bit计数器：
-
-```verilog
-reg        sync_prev;
-wire       sync_rise = sync_out & ~sync_prev;
-reg [31:0] sync_cnt;
-
-always @(posedge clk or negedge rst) begin
-    if (!rst) begin
-        sync_prev <= 0;
-        sync_cnt  <= 0;
-    end else begin
-        sync_prev <= sync_out;
-        if (sync_rise) sync_cnt <= sync_cnt + 1;
-    end
-end
-```
-
-**主控FSM（7状态）：**
+**主控FSM（4状态）：**
 
 ```
 S_WAIT_RX   → 等待rx_valid
 S_CHECK_Q   → 检查是否为'q'(0x71)
-S_WAIT_SYNC → 等待sync_rise
-S_FIRE      → 触发激光（fire=1，持续1周期）
-S_TX_LOAD   → 发送当前字节（tx_start=1，持续1周期）
-S_TX_WAIT   → 等待tx_busy下降沿
-S_STOPPED   → 停止状态（laser全0，不再TX）
+S_WAIT_SYNC → 等待sync_rise，触发fire
+S_STOPPED   → 停止状态（laser全0）
 ```
 
 **状态转移：**
@@ -89,21 +64,13 @@ S_STOPPED   → 停止状态（laser全0，不再TX）
 | S_WAIT_RX | rx_valid | S_CHECK_Q | 锁存rx_data → data_latch |
 | S_CHECK_Q | data_latch==0x71 | S_STOPPED | — |
 | S_CHECK_Q | else | S_WAIT_SYNC | — |
-| S_WAIT_SYNC | sync_rise | S_FIRE | 锁存sync_cnt → cnt_latch |
-| S_FIRE | always | S_TX_LOAD | fire=1（1周期）; byte_idx=0 |
-| S_TX_LOAD | always | S_TX_WAIT | tx_start=1（1周期），tx_data=cnt_latch对应字节 |
-| S_TX_WAIT | tx_was_busy && ~tx_busy && byte_idx==3 | S_WAIT_RX | — |
-| S_TX_WAIT | tx_was_busy && ~tx_busy && byte_idx<3 | S_TX_LOAD | byte_idx++ |
-| S_TX_WAIT | tx_busy | S_TX_WAIT | tx_was_busy=1 |
+| S_WAIT_SYNC | sync_rise | S_WAIT_RX | fire=1（1周期） |
 | S_STOPPED | always | S_STOPPED | — |
 
-**4字节发送顺序（大端序）：**
+**laser_en逻辑：**
 
-```
-byte_idx 0 → cnt_latch[31:24]
-byte_idx 1 → cnt_latch[23:16]
-byte_idx 2 → cnt_latch[15:8]
-byte_idx 3 → cnt_latch[7:0]
+```verilog
+assign laser_en = |laser;  // 任一laser为1时使能
 ```
 
 **LED逻辑：**
@@ -133,29 +100,7 @@ assign led_empty = (state == S_STOPPED);  // 停止时LED亮
 
 ---
 
-### 2.3 UART发送器 `uart_tx.v`
-
-每次光子事件后，向上位机发送4字节（32bit大端序sync计数值）。（模块本身无变化，触发逻辑移至top.v FSM）
-
-**参数：**
-
-| 参数          | 默认值      | 说明              |
-| ------------- | ----------- | ----------------- |
-| `CLK_FREQ`  | 100_000_000 | 系统时钟频率 (Hz) |
-| `BAUD_RATE` | 115_200     | 波特率            |
-
-**端口：**
-
-| 信号       | 方向   | 说明                         |
-| ---------- | ------ | ---------------------------- |
-| `tx_data`  | input  | 待发送字节                   |
-| `tx_start` | input  | 发送触发脉冲（1个时钟周期）  |
-| `tx_busy`  | output | 发送中标志（高电平表示忙碌） |
-| `uart_tx`  | output | 串行输出线                   |
-
----
-
-### 2.4 UART接收器 `uart_rx.v`
+### 2.3 UART接收器 `uart_rx.v`
 
 接收来自Alice计算机的串行数据。（无变化）
 
@@ -190,9 +135,9 @@ assign led_empty = (state == S_STOPPED);  // 停止时LED亮
 
 ---
 
-### 2.5 激光器控制器 `laser_ctrl.v`
+### 2.4 激光器控制器 `laser_ctrl.v`
 
-接收fire脉冲和激光选择信号，驱动对应激光器输出固定宽度脉冲。（去掉FIFO接口，改为直接fire触发）
+接收fire脉冲和激光选择信号，驱动对应激光器输出固定宽度脉冲。
 
 **参数：**
 
@@ -235,19 +180,20 @@ LASER_PULSE_WIDTH < CLK_FREQ / SYNC_FREQ
 ## 3. 时序关系
 
 ```
-uart_rx   ──[byte]──────────────────────────────────────────
+uart_rx   ──[byte]──────────────────────────
                    │
 top FSM            ▼ S_WAIT_SYNC
 sync_out  ─┐  ┌──┐  ┌──┐
            └──┘  └──┘  └──
                       │
-top FSM               ▼ S_FIRE → S_TX_LOAD → S_TX_WAIT(×4)
+top FSM               ▼ fire → S_WAIT_RX
 laser[i]              ┌─┐
                       └─┘ (LASER_PULSE_WIDTH周期)
-uart_tx               ────[B3][B2][B1][B0]──── (4字节大端序sync计数)
+laser_en              ┌─┐
+                      └─┘ (与laser[i]同步)
 ```
 
-每次光子事件：收到字节 → 等待下一sync上升沿 → 触发激光 → 发回4字节sync计数。
+每次光子事件：收到字节 → 等待下一sync上升沿 → 触发激光 → 等待下一字节。
 
 ---
 
@@ -265,25 +211,19 @@ uart_tx               ────[B3][B2][B1][B0]──── (4字节大端序
 - 用任务 `send_byte(data)` 模拟串口发送
 - 验证：`rx_valid` 在停止位后一周期拉高，`rx_data` 值正确
 
-### 4.3 `tb_uart_tx.v`（无变化）
+### 4.3 `tb_laser_ctrl.v`
 
-- 脉冲 `tx_start`，采样 `uart_tx` 输出，逐位验证
-- 验证 `tx_busy` 行为
-
-### 4.4 `tb_laser_ctrl.v`（更新）
-
-- 直接驱动 `laser_sel` 和 `fire` 脉冲（无FIFO信号）
+- 直接驱动 `laser_sel` 和 `fire` 脉冲
 - 验证：`laser` 输出与 `laser_sel` 编码一致，`busy` 信号正确
 - 验证脉冲宽度为 `LASER_PULSE_WIDTH` 周期
 
-### 4.5 `tb_top.v`（重写）
+### 4.4 `tb_top.v`
 
-- 顶层集成仿真，使用缩短参数（`BAUD_RATE` 调高、`SYNC_FREQ` 调低）
+- 顶层集成仿真，使用缩短参数（`BAUD_RATE` 调高）
 - 测试流程：
   1. Reset
-  2. 发送字节 `0x00` → 等待sync脉冲触发 → 接收4字节sync计数值，验证正确
-  3. 重复发送 `0x01`, `0x02`, `0x03`，验证对应激光器触发
-  4. 发送 `0x71`（'q'）→ 验证激光全灭、无TX输出、`led_empty` 拉高
+  2. 发送字节 `0x00`~`0x03`，验证对应激光器触发、`laser_en` 正确
+  3. 发送 `0x71`（'q'）→ 验证激光全灭、`led_empty` 拉高
 
 ---
 
@@ -296,17 +236,15 @@ FPGA-control/
 │   └── implementation_plan.md      ← 本文件
 ├── user/
 │   ├── src/
-│   │   ├── top.v                   顶层模块（含主控FSM和sync计数器）
+│   │   ├── top.v                   顶层模块（含主控FSM）
 │   │   ├── sync_gen.v              同步信号发生器
 │   │   ├── uart_rx.v               UART接收器
-│   │   ├── uart_tx.v               UART发送器
-│   │   └── laser_ctrl.v            激光器控制器（fire触发，无FIFO）
+│   │   └── laser_ctrl.v            激光器控制器（fire触发）
 │   ├── sim/
-│   │   ├── tb_top.v                顶层仿真testbench（重写）
+│   │   ├── tb_top.v                顶层仿真testbench
 │   │   ├── tb_sync_gen.v           同步模块仿真
 │   │   ├── tb_uart_rx.v            UART接收仿真
-│   │   ├── tb_uart_tx.v            UART发送仿真
-│   │   └── tb_laser_ctrl.v         激光控制仿真（更新）
+│   │   └── tb_laser_ctrl.v         激光控制仿真
 │   └── data/
 │       └── top.xdc                 引脚约束文件
 └── prj/                            Vivado工程目录
@@ -322,7 +260,6 @@ FPGA-control/
 | 同步信号频率 | 1 MHz（可调）        | 对应1μs时隙间隔    |
 | UART波特率   | 115200 bps           | 标准波特率          |
 | 激光脉冲宽度 | 10个时钟周期 = 100ns | 需小于同步周期1μs  |
-| sync计数器   | 32bit，从复位起累计  | 大端序发回上位机    |
 
 ---
 
@@ -330,24 +267,21 @@ FPGA-control/
 
 XDC文件需约束以下信号：
 
-- `clk`：绑定至FPGA时钟引脚，添加 `create_clock` 约束
-- `uart_rx`：绑定至UART RX引脚，设置输入延迟
-- `uart_tx`：绑定至UART TX引脚
-- `sync_out`：绑定至同步信号输出引脚
-- `laser[3:0]`：绑定至4个激光器驱动引脚
-- `led_empty`：绑定至板载LED引脚
-
-具体引脚编号需根据实际PCB/开发板原理图确定后填入XDC。
+- `clk`：绑定至FPGA时钟引脚（R4）
+- `rst`：绑定至按键引脚（K22）
+- `uart_rx`：绑定至UART RX引脚（B20）
+- `sync_out`：绑定至同步信号输出引脚（AA3）
+- `laser[3:0]`：绑定至4个激光器驱动引脚（AB3, AA5, AA6, AB7）
+- `laser_en`：绑定至激光器使能引脚（AB8）
+- `led_empty`：绑定至板载LED引脚（V2）
 
 ---
 
 ## 8. 协议约定
 
-上位机与FPGA通信协议（严格请求-响应）：
+上位机与FPGA通信协议：
 
 1. 上位机发送1字节：`data[1:0]` 编码激光器选择，其余bit忽略
-2. FPGA在下一个sync上升沿触发激光，然后发回4字节（大端序32bit sync计数值）
-3. 上位机收到4字节后，可发送下一字节
+2. FPGA在下一个sync上升沿触发激光
+3. 上位机可立即发送下一字节（FSM在fire后立即回到S_WAIT_RX）
 4. 上位机发送 `0x71`（'q'）时，FPGA停止工作（复位前不再响应）
-
-**注意：** S_WAIT_SYNC期间若有新UART字节到达，将被丢弃。协议保证上位机在收到4字节响应前不发送下一字节。

@@ -6,7 +6,7 @@ localparam CLK_FREQ  = 100_000_000;
 localparam BAUD_RATE = 10_000_000;  // Fast baud for simulation
 localparam CLKS_PER_BIT = CLK_FREQ / BAUD_RATE;  // = 10
 
-reg  clk, rst_n;
+reg  clk, rst;
 reg  uart_rx_in;
 wire [7:0] rx_data;
 wire       rx_valid;
@@ -16,7 +16,7 @@ uart_rx #(
     .BAUD_RATE(BAUD_RATE)
 ) dut (
     .clk     (clk),
-    .rst_n   (rst_n),
+    .rst   (rst),
     .uart_rx (uart_rx_in),
     .rx_data (rx_data),
     .rx_valid(rx_valid)
@@ -48,10 +48,10 @@ integer errors;
 
 initial begin
     errors     = 0;
-    rst_n      = 0;
+    rst      = 0;
     uart_rx_in = 1;  // Idle high
     repeat(4) @(posedge clk);
-    rst_n = 1;
+    rst = 1;
     repeat(2) @(posedge clk);
 
     // Test 1: send 0xA5

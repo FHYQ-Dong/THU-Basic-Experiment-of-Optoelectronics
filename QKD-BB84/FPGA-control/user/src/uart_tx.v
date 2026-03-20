@@ -5,7 +5,7 @@ module uart_tx #(
     parameter BAUD_RATE = 115_200       // Baud rate
 ) (
     input  wire       clk,
-    input  wire       rst_n,
+    input  wire       rst,
     input  wire [7:0] tx_data,
     input  wire       tx_start,
     output reg        tx_busy,
@@ -24,8 +24,8 @@ reg [$clog2(CLKS_PER_BIT)-1:0] baud_cnt;
 reg [2:0]               bit_idx;
 reg [7:0]               shift_reg;
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
+always @(posedge clk) begin
+    if (rst) begin
         state    <= S_IDLE;
         baud_cnt <= 0;
         bit_idx  <= 0;

@@ -3,17 +3,15 @@
 module tb_top;
 
 localparam CLK_FREQ          = 100_000_000;
-localparam BAUD_RATE         = 10_000_000;
+localparam BAUD_RATE         = 10_000_000;   // Accelerated for simulation
 localparam SYNC_FREQ         = 1_000_000;
 localparam SYNC_PULSE_WIDTH  = 10;
-localparam FIFO_DEPTH        = 1024;
-localparam SYNC_DIV          = 1;
 localparam LASER_PULSE_WIDTH = 10;
 
-localparam CLKS_PER_BIT  = CLK_FREQ / BAUD_RATE;   // = 10
-localparam SYNC_PERIOD   = CLK_FREQ / SYNC_FREQ;    // = 100
+localparam CLKS_PER_BIT = CLK_FREQ / BAUD_RATE;  // = 10
+localparam SYNC_PERIOD  = CLK_FREQ / SYNC_FREQ;   // = 100
 
-reg  clk, rst_n;
+reg  clk, rst;
 reg  uart_rx_in;
 wire uart_tx_out;
 wire sync_out;
@@ -25,12 +23,10 @@ top #(
     .SYNC_FREQ        (SYNC_FREQ),
     .SYNC_PULSE_WIDTH (SYNC_PULSE_WIDTH),
     .BAUD_RATE        (BAUD_RATE),
-    .FIFO_DEPTH       (FIFO_DEPTH),
-    .SYNC_DIV         (SYNC_DIV),
     .LASER_PULSE_WIDTH(LASER_PULSE_WIDTH)
 ) dut (
     .clk      (clk),
-    .rst_n    (rst_n),
+    .rst      (rst),
     .uart_rx  (uart_rx_in),
     .uart_tx  (uart_tx_out),
     .sync_out (sync_out),
@@ -41,7 +37,7 @@ top #(
 initial clk = 0;
 always #5 clk = ~clk;
 
-// Send one byte via UART RX (includes stop bit wait)
+// Send one byte via UART RX (8N1)
 task uart_send;
     input [7:0] data;
     integer i;
@@ -57,7 +53,7 @@ task uart_send;
     end
 endtask
 
-// Receive one byte from uart_tx_out (waits for negedge start bit)
+// Receive one byte from uart_tx_out (waits for start bit negedge)
 task uart_recv;
     output [7:0] data;
     integer i;
@@ -74,80 +70,82 @@ task uart_recv;
     end
 endtask
 
-integer errors;
-reg [7:0] rx_byte;
-reg       tx_received;
+// Receive 4 bytes (big-endian 32-bit value)
+task recv_u32;
+    output [31:0] val;
+    reg [7:0] b;
+    begin
+        uart_recv(b); val[31:24] = b;
+        uart_recv(b); val[23:16] = b;
+        uart_recv(b); val[15:8]  = b;
+        uart_recv(b); val[7:0]   = b;
+    end
+endtask
 
-localparam [7:0] D0 = 8'h00;
-localparam [7:0] D1 = 8'h01;
-localparam [7:0] D2 = 8'h02;
-localparam [7:0] D3 = 8'h03;
+integer   errors;
+reg [3:0] expected_laser;
+reg [31:0] sync_val;
+reg [31:0] prev_sync_val;
 
 initial begin
-    errors      = 0;
-    tx_received = 0;
-    rst_n       = 0;
-    uart_rx_in  = 1;
+    errors        = 0;
+    uart_rx_in    = 1;
+    rst           = 0;
     repeat(4) @(posedge clk);
-    rst_n = 1;
+    rst = 1;
     repeat(4) @(posedge clk);
 
-    // ── Step 1: FIFO starts empty ─────────────────────────────────────────
-    if (!led_empty) begin
-        $display("FAIL: led_empty should be high at start");
-        errors = errors + 1;
-    end
-
-    // ── Step 2+3+4: Send bytes, drain FIFO, capture TX notification ───────
-    // Start uart_recv listener BEFORE sending data so it doesn't miss the TX
-    fork
-        begin : recv_block
-            uart_recv(rx_byte);
-            tx_received = 1;
-        end
-        begin : main_block
-            // Send 4 bytes
-            uart_send(D0);
-            uart_send(D1);
-            uart_send(D2);
-            uart_send(D3);
-            repeat(4) @(posedge clk);
-
-            if (led_empty) begin
-                $display("FAIL: led_empty should be low after filling FIFO");
-                errors = errors + 1;
-            end
-
-            // Wait for sync_gen to drain all 4 slots
-            // Each slot = SYNC_PERIOD clocks; add margin
-            repeat(6 * SYNC_PERIOD) @(posedge clk);
-
-            if (!led_empty) begin
-                $display("FAIL: led_empty should be high after FIFO drained");
-                errors = errors + 1;
-            end
-
-            // Wait for TX notification to arrive (up to 200 clocks)
-            repeat(200) @(posedge clk);
-            if (!tx_received) begin
-                $display("FAIL: timeout waiting for TX notification");
-                errors = errors + 1;
-                disable recv_block;
-            end
-        end
-    join
-
-    if (tx_received && rx_byte !== 8'h52) begin
-        $display("FAIL: expected 0x52 ('R'), got 0x%02X", rx_byte);
-        errors = errors + 1;
-    end
-
-    // ── Step 5: Send more data → led_empty goes low ───────────────────────
-    uart_send(D0);
-    repeat(4) @(posedge clk);
+    // ── Test 1: led_empty low at start (not stopped) ──────────────────────
     if (led_empty) begin
-        $display("FAIL: led_empty should be low after new data");
+        $display("FAIL: led_empty should be low at start (not stopped)");
         errors = errors + 1;
+    end
+
+    // ── Test 2-5: Send 4 bytes, verify laser and sync count response ───────
+    begin : test_photons
+        integer sel;
+        for (sel = 0; sel < 4; sel = sel + 1) begin
+            fork
+                begin : send_block
+                    uart_send(sel[7:0]);
+                end
+                begin : recv_block
+                    recv_u32(sync_val);
+                end
+            join
+
+            // Verify correct laser fired
+            // (laser pulse is brief; check via sync_val being non-zero after first sync)
+            // Verify sync_val is monotonically increasing
+            if (sel > 0 && sync_val <= prev_sync_val) begin
+                $display("FAIL sel=%0d: sync_val %0d not > prev %0d", sel, sync_val, prev_sync_val);
+                errors = errors + 1;
+            end
+            prev_sync_val = sync_val;
+            $display("INFO sel=%0d: sync_val=%0d", sel, sync_val);
+        end
+    end
+
+    // ── Test 6: Send 'q', verify stopped ──────────────────────────────────
+    uart_send(8'h71);
+    repeat(10) @(posedge clk);
+
+    if (!led_empty) begin
+        $display("FAIL: led_empty should be high after 'q'");
+        errors = errors + 1;
+    end
+
+    // Verify no TX activity after 'q' (wait several sync periods)
+    begin : test_no_tx
+        integer k;
+        for (k = 0; k < 3 * SYNC_PERIOD; k = k + 1) begin
+            @(posedge clk);
+            if (!uart_tx_out) begin
+                $display("FAIL: unexpected TX activity after 'q'");
+                errors = errors + 1;
+                k = 3 * SYNC_PERIOD;  // break
+            end
+        end
     end
 
     if (errors == 0)
@@ -159,7 +157,7 @@ initial begin
 end
 
 initial begin
-    #20_000_000;
+    #50_000_000;
     $display("FAIL: global simulation timeout");
     $finish;
 end

@@ -2,148 +2,143 @@
 
 module tb_laser_ctrl;
 
-localparam SYNC_DIV          = 2;
 localparam LASER_PULSE_WIDTH = 3;
 
-reg  clk, rst_n;
-reg  sync_in;
-reg  [7:0] fifo_data;
-reg        fifo_empty;
-wire       fifo_rd_en;
+reg  clk, rst;
+reg  [1:0] laser_sel;
+reg        fire;
 wire [3:0] laser;
+wire       busy;
 
 laser_ctrl #(
-    .SYNC_DIV         (SYNC_DIV),
     .LASER_PULSE_WIDTH(LASER_PULSE_WIDTH)
 ) dut (
-    .clk       (clk),
-    .rst_n     (rst_n),
-    .sync_in   (sync_in),
-    .fifo_data (fifo_data),
-    .fifo_empty(fifo_empty),
-    .fifo_rd_en(fifo_rd_en),
-    .laser     (laser)
+    .clk      (clk),
+    .rst      (rst),
+    .laser_sel(laser_sel),
+    .fire     (fire),
+    .laser    (laser),
+    .busy     (busy)
 );
 
 initial clk = 0;
 always #5 clk = ~clk;
 
-// Generate one sync rising edge, then wait for the rest of the period
-// Returns after the full period (10 clocks total)
-task sync_pulse;
+// Fire one pulse and wait for it to complete
+task do_fire;
+    input [1:0] sel;
     begin
-        @(posedge clk); #1 sync_in = 1;  // Rising edge seen by DUT on next posedge
-        @(posedge clk); #1 sync_in = 0;
-        repeat(8) @(posedge clk);
-    end
-endtask
-
-// Generate N-1 non-triggering pulses, then one triggering pulse.
-// After the trigger rising edge, wait 'extra' clocks before returning.
-// This lets the caller sample laser at the right time.
-task fire_slot;
-    input integer extra_wait;
-    integer p;
-    begin
-        // N-1 non-triggering pulses
-        for (p = 0; p < SYNC_DIV - 1; p = p + 1)
-            sync_pulse;
-        // Triggering pulse: only drive the rising edge, then wait extra clocks
-        @(posedge clk); #1 sync_in = 1;   // trigger rising edge
-        @(posedge clk); #1 sync_in = 0;
-        repeat(extra_wait) @(posedge clk);
+        @(posedge clk); #1;
+        laser_sel = sel;
+        fire      = 1;
+        @(posedge clk); #1;
+        fire = 0;
+        // Wait for busy to go high then low
+        @(posedge busy);
+        @(negedge busy);
+        @(posedge clk); #1;
     end
 endtask
 
 integer errors;
 
-// Simulate FIFO: update fifo_data one cycle after rd_en (matches data_buffer read latency)
-reg [7:0] fifo_queue [0:3];
-integer   fifo_head;
-reg       rd_en_r;
-
-always @(posedge clk) begin
-    rd_en_r <= fifo_rd_en;
-    if (rd_en_r && !fifo_empty) begin
-        fifo_head  = fifo_head + 1;
-        fifo_data  = fifo_queue[fifo_head < 4 ? fifo_head : 3];
-        fifo_empty = (fifo_head >= 4);
-    end
-end
-
 initial begin
-    errors     = 0;
-    rst_n      = 0;
-    sync_in    = 0;
-    fifo_empty = 1;
-    fifo_data  = 0;
-    fifo_head  = 0;
-
-    fifo_queue[0] = 8'h00;  // laser[0]
-    fifo_queue[1] = 8'h01;  // laser[1]
-    fifo_queue[2] = 8'h02;  // laser[2]
-    fifo_queue[3] = 8'h03;  // laser[3]
+    errors    = 0;
+    rst       = 0;
+    fire      = 0;
+    laser_sel = 0;
 
     repeat(4) @(posedge clk);
-    rst_n = 1;
+    rst = 1;
     repeat(2) @(posedge clk);
 
-    // ── Test 1: FIFO empty → no laser fires ──────────────────────────────
-    fifo_empty = 1;
-    // fire_slot with extra_wait=4 so we can check laser during DRIVE window
-    fire_slot(4);
-    if (laser !== 4'b0000) begin
-        $display("FAIL: laser should be 0 when FIFO empty, got %04b", laser);
-        errors = errors + 1;
-    end
-    // Drain remaining period
-    repeat(6) @(posedge clk);
-
-    // ── Test 2: Each encoding ─────────────────────────────────────────────
-    fifo_head  = 0;
-    fifo_data  = fifo_queue[0];
-    fifo_empty = 0;
-
+    // ── Test 1: Each encoding fires correct laser ─────────────────────────
     begin : test_encodings
-        reg [3:0] expected_laser;
-        integer slot;
-        for (slot = 0; slot < 4; slot = slot + 1) begin
-            // Trigger and wait 4 clocks: trigger→READ(+1)→DRIVE(+2)→laser stable(+3), sample at +4
-            fire_slot(4);
+        reg [3:0] expected;
+        integer   sel;
+        for (sel = 0; sel < 4; sel = sel + 1) begin
+            @(posedge clk); #1;
+            laser_sel = sel[1:0];
+            fire      = 1;
+            @(posedge clk); #1;
+            fire = 0;
 
-            case (fifo_queue[slot][1:0])
-                2'b00: expected_laser = 4'b0001;
-                2'b01: expected_laser = 4'b0010;
-                2'b10: expected_laser = 4'b0100;
-                2'b11: expected_laser = 4'b1000;
+            // Wait for DRIVE state (busy goes high)
+            @(posedge busy);
+            @(posedge clk); #1;
+
+            case (sel[1:0])
+                2'b00: expected = 4'b0001;
+                2'b01: expected = 4'b0010;
+                2'b10: expected = 4'b0100;
+                2'b11: expected = 4'b1000;
             endcase
 
-            if (laser !== expected_laser) begin
-                $display("FAIL slot %0d: expected laser=%04b, got %04b",
-                         slot, expected_laser, laser);
+            if (laser !== expected) begin
+                $display("FAIL sel=%0d: expected laser=%04b, got %04b", sel, expected, laser);
                 errors = errors + 1;
             end
 
-            // Wait for pulse to end (LASER_PULSE_WIDTH - already waited 2 clocks in DRIVE)
-            // pulse_cnt starts at 0 in DRIVE, ends at LASER_PULSE_WIDTH-1
-            // We sampled at DRIVE+2, pulse ends at DRIVE+LASER_PULSE_WIDTH
-            // Wait remaining + margin
-            repeat(LASER_PULSE_WIDTH + 4) @(posedge clk);
+            // Wait for pulse to end
+            @(negedge busy);
+            @(posedge clk); #1;
 
             if (laser !== 4'b0000) begin
-                $display("FAIL slot %0d: laser should be 0 after pulse", slot);
+                $display("FAIL sel=%0d: laser should be 0 after pulse", sel);
                 errors = errors + 1;
             end
         end
     end
 
-    // ── Test 3: FIFO exhausted → laser stays low ─────────────────────────
-    fire_slot(4);
-    if (laser !== 4'b0000) begin
-        $display("FAIL: laser should be 0 after FIFO exhausted");
-        errors = errors + 1;
+    // ── Test 2: busy signal duration = LASER_PULSE_WIDTH cycles ──────────
+    begin : test_pulse_width
+        integer cnt;
+        cnt = 0;
+        @(posedge clk); #1;
+        laser_sel = 2'b00;
+        fire      = 1;
+        @(posedge clk); #1;
+        fire = 0;
+
+        @(posedge busy);
+        // Count cycles while busy
+        while (busy) begin
+            @(posedge clk); #1;
+            cnt = cnt + 1;
+        end
+
+        if (cnt !== LASER_PULSE_WIDTH) begin
+            $display("FAIL: pulse width = %0d, expected %0d", cnt, LASER_PULSE_WIDTH);
+            errors = errors + 1;
+        end
     end
-    repeat(LASER_PULSE_WIDTH + 4) @(posedge clk);
+
+    // ── Test 3: fire ignored while busy ───────────────────────────────────
+    begin : test_busy_ignore
+        // Fire sel=01 (laser[1])
+        @(posedge clk); #1;
+        laser_sel = 2'b01;
+        fire      = 1;
+        @(posedge clk); #1;
+        fire = 0;
+
+        // While busy, attempt to fire sel=10 (should be ignored)
+        @(posedge busy);
+        @(posedge clk); #1;
+        laser_sel = 2'b10;
+        fire      = 1;
+        @(posedge clk); #1;
+        fire = 0;
+
+        // Should still be laser[1] (sel=01), not laser[2] (sel=10)
+        if (laser !== 4'b0010) begin
+            $display("FAIL: fire during busy changed laser to %04b", laser);
+            errors = errors + 1;
+        end
+
+        @(negedge busy);
+        @(posedge clk); #1;
+    end
 
     if (errors == 0)
         $display("PASS: laser_ctrl all checks passed");

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(iverilog -o tb_uart_rx.vvp user/sim/tb_uart_rx.v user/src/uart_rx.v)",
+      "Bash(vvp tb_uart_rx.vvp)",
+      "Bash(iverilog -o tb_uart_tx.vvp user/sim/tb_uart_tx.v user/src/uart_tx.v)",
+      "Bash(vvp tb_uart_tx.vvp)",
+      "Bash(iverilog -o tb_laser_ctrl.vvp user/sim/tb_laser_ctrl.v user/src/laser_ctrl.v)",
+      "Bash(vvp tb_laser_ctrl.vvp)",
+      "Bash(iverilog -o tb_sync_gen.vvp user/sim/tb_sync_gen.v user/src/sync_gen.v)",
+      "Bash(vvp tb_sync_gen.vvp)",
+      "Bash(iverilog -o tb_top.vvp user/sim/tb_top.v user/src/top.v user/src/sync_gen.v user/src/uart_rx.v user/src/uart_tx.v user/src/data_buffer.v user/src/laser_ctrl.v)",
+      "Bash(timeout 60 vvp tb_top.vvp)"
+    ]
+  }
+}

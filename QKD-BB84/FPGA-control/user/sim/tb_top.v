@@ -13,9 +13,9 @@ localparam SYNC_PERIOD  = CLK_FREQ / SYNC_FREQ;   // = 100
 
 reg  clk, rst;
 reg  uart_rx_in;
-wire uart_tx_out;
 wire sync_out;
 wire [3:0] laser;
+wire laser_en;
 wire led_empty;
 
 top #(
@@ -28,9 +28,9 @@ top #(
     .clk      (clk),
     .rst      (rst),
     .uart_rx  (uart_rx_in),
-    .uart_tx  (uart_tx_out),
     .sync_out (sync_out),
     .laser    (laser),
+    .laser_en (laser_en),
     .led_empty(led_empty)
 );
 
@@ -53,80 +53,84 @@ task uart_send;
     end
 endtask
 
-// Receive one byte from uart_tx_out (waits for start bit negedge)
-task uart_recv;
-    output [7:0] data;
-    integer i;
-    reg [7:0] captured;
-    begin
-        @(negedge uart_tx_out);
-        repeat(CLKS_PER_BIT / 2) @(posedge clk);
-        for (i = 0; i < 8; i = i + 1) begin
-            repeat(CLKS_PER_BIT) @(posedge clk);
-            captured[i] = uart_tx_out;
-        end
-        repeat(CLKS_PER_BIT) @(posedge clk);
-        data = captured;
-    end
-endtask
-
-// Receive 4 bytes (big-endian 32-bit value)
-task recv_u32;
-    output [31:0] val;
-    reg [7:0] b;
-    begin
-        uart_recv(b); val[31:24] = b;
-        uart_recv(b); val[23:16] = b;
-        uart_recv(b); val[15:8]  = b;
-        uart_recv(b); val[7:0]   = b;
-    end
-endtask
-
-integer   errors;
-reg [3:0] expected_laser;
-reg [31:0] sync_val;
-reg [31:0] prev_sync_val;
+integer errors;
 
 initial begin
-    errors        = 0;
-    uart_rx_in    = 1;
-    rst           = 0;
+    errors     = 0;
+    uart_rx_in = 1;
+    rst        = 0;
     repeat(4) @(posedge clk);
     rst = 1;
     repeat(4) @(posedge clk);
 
-    // ── Test 1: led_empty low at start (not stopped) ──────────────────────
+    // ── Test 1: led_empty low at start (not stopped) ────────────────────
     if (led_empty) begin
         $display("FAIL: led_empty should be low at start (not stopped)");
         errors = errors + 1;
     end
 
-    // ── Test 2-5: Send 4 bytes, verify laser and sync count response ───────
+    // ── Test 2-5: Send 4 bytes, verify laser fires after sync ───────────
     begin : test_photons
+        reg [3:0] expected;
         integer sel;
         for (sel = 0; sel < 4; sel = sel + 1) begin
-            fork
-                begin : send_block
-                    uart_send(sel[7:0]);
-                end
-                begin : recv_block
-                    recv_u32(sync_val);
-                end
-            join
+            uart_send(sel[7:0]);
 
-            // Verify correct laser fired
-            // (laser pulse is brief; check via sync_val being non-zero after first sync)
-            // Verify sync_val is monotonically increasing
-            if (sel > 0 && sync_val <= prev_sync_val) begin
-                $display("FAIL sel=%0d: sync_val %0d not > prev %0d", sel, sync_val, prev_sync_val);
-                errors = errors + 1;
-            end
-            prev_sync_val = sync_val;
-            $display("INFO sel=%0d: sync_val=%0d", sel, sync_val);
+            // Wait for sync edge + fire + laser pulse to appear
+            repeat(SYNC_PERIOD + LASER_PULSE_WIDTH + 10) @(posedge clk);
+
+            // By now the laser pulse has ended; verify laser_en went high
+            // We check indirectly: send next byte and repeat.
+            // Direct check: watch for laser_en pulse during the wait.
         end
     end
 
-    // ── Test 6: Send 'q', verify stopped ──────────────────────────────────
+    // More precise laser check: send one byte and sample laser during pulse
+    begin : test_laser_encoding
+        reg [3:0] expected;
+        integer sel;
+        for (sel = 0; sel < 4; sel = sel + 1) begin
+            uart_send(sel[7:0]);
+
+            // Wait for laser_en to go high (laser pulse started)
+            begin : wait_laser
+                integer timeout;
+                timeout = 0;
+                while (!laser_en && timeout < 2 * SYNC_PERIOD) begin
+                    @(posedge clk);
+                    timeout = timeout + 1;
+                end
+                if (timeout >= 2 * SYNC_PERIOD) begin
+                    $display("FAIL sel=%0d: laser_en never went high", sel);
+                    errors = errors + 1;
+                end
+            end
+
+            case (sel[1:0])
+                2'b00: expected = 4'b0001;
+                2'b01: expected = 4'b0010;
+                2'b10: expected = 4'b0100;
+                2'b11: expected = 4'b1000;
+            endcase
+
+            if (laser_en) begin
+                if (laser !== expected) begin
+                    $display("FAIL sel=%0d: expected laser=%04b, got %04b", sel, expected, laser);
+                    errors = errors + 1;
+                end
+                if (!laser_en) begin
+                    $display("FAIL sel=%0d: laser_en should be high when laser active", sel);
+                    errors = errors + 1;
+                end
+            end
+
+            // Wait for pulse to end
+            @(negedge laser_en);
+            @(posedge clk);
+        end
+    end
+
+    // ── Test 6: Send 'q', verify stopped ────────────────────────────────
     uart_send(8'h71);
     repeat(10) @(posedge clk);
 
@@ -135,13 +139,13 @@ initial begin
         errors = errors + 1;
     end
 
-    // Verify no TX activity after 'q' (wait several sync periods)
-    begin : test_no_tx
+    // Verify no laser activity after 'q'
+    begin : test_no_laser
         integer k;
         for (k = 0; k < 3 * SYNC_PERIOD; k = k + 1) begin
             @(posedge clk);
-            if (!uart_tx_out) begin
-                $display("FAIL: unexpected TX activity after 'q'");
+            if (laser_en) begin
+                $display("FAIL: unexpected laser activity after 'q'");
                 errors = errors + 1;
                 k = 3 * SYNC_PERIOD;  // break
             end

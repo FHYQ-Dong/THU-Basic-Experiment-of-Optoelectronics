@@ -1,0 +1,123 @@
+\documentclass[utf8,twocolumn]{ctexart}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usepackage{circuitikz}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{pdfpages}
+\usepackage{booktabs}
+\usepackage{subfigure}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+% math font
+\usepackage{mathrsfs}
+\usepackage{multirow}
+\usepackage{inputenc}
+\usepackage{fancyhdr}
+\usepackage{physics}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,      
+    urlcolor=black,
+    citecolor=black,
+}
+\geometry{a4paper, scale=0.8}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{半导体激光器}
+\rhead{无37~董皓彧~2023010659}
+\cfoot{---~~\thepage~~---}
+
+% 双栏间隔
+\setlength{\columnsep}{20pt}
+
+\title{半导体激光器特性测量实验报告}
+\author{无37~董皓彧~2023010659}
+\date{\zhtoday}
+
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{实验过程及数据分析}
+
+\subsection{DFB 半导体激光器的 P-I 曲线}
+将 DFB 激光器的输出端使用光纤直接连接到光功率计上，调整驱动电流。先以 2.0 mA 为步长粗调，在根据粗调结果在部分区间内以 0.2 mA 为步长细调，测量并记录激光器的输出功率。保持温度为 $14^\circ\mathrm{C}$ 不变。测量结果如表 \ref{tab:PI}. 绘制 P-I 曲线如图 \ref{fig:PI}.
+\begin{table}[H]
+    \centering
+    \begin{tabular}{cc|cc}
+        \toprule
+        $I_\mathrm{d} (\text{mA})$ & $P_\mathrm{out} (\mu\text{W})$ & $I_\mathrm{d} (\text{mA})$ & $P_\mathrm{out} (\mu\text{W})$ \\
+        \midrule
+        0.2  & 0.04375 & 8.2  & 11.94 \\
+        2.0  & 0.5766  & 8.4  & 12.74 \\
+        4.0  & 2.106   & 8.6  & 16.11 \\
+        6.0  & 5.480   & 8.8  & 22.86 \\
+        8.0  & 11.45   & 9.0  & 37.15 \\
+        10.0 & 104.8   & 9.2  & 47.53 \\
+        12.0 & 250.0   & 9.4  & 61.80 \\
+        14.0 & 391.8   & 9.6  & 74.30 \\
+        16.0 & 538.8   & 9.8  & 93.33 \\
+        18.0 & 680.6   &      &       \\
+        20.0 & 827.5   &      &       \\
+        22.0 & 977.1   &      &       \\
+        24.0 & 1124    &      &       \\
+        25.0 & 1191    &      &       \\
+        \bottomrule
+    \end{tabular}
+    \caption{DFB 半导体激光器的 P-I 曲线数据}
+    \label{tab:PI}
+\end{table}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/P-I-curve.png}
+    \vspace{-2em}
+    \caption{DFB 半导体激光器的 P-I 曲线}
+    \label{fig:PI}
+\end{figure}
+使用直线拟合法得到阈值电流为 $8.55\text{ mA}$，斜率效率为 $0.07244\text{ mW/mA}$。 
+
+
+\subsection{DFB 半导体激光器的 P-T 规律}
+固定驱动电流为 $10\text{ mA}$ 不变，调整温控电流源的温度调节旋钮，记录不同温度下的输出功率。测量结果如表 \ref{tab:PT}. 绘制 P-T 曲线如图 \ref{fig:PT}.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/P-T-curve.png}
+    \vspace{-2em}
+    \caption{DFB 半导体激光器的 P-T 曲线}
+    \label{fig:PT}
+\end{figure}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{cc}
+        \toprule
+        $T (^\circ\mathrm{C})$ & $P_\mathrm{out} (\mu\text{W})$ \\
+        \midrule
+        14.0 & 105.7 \\ 
+        15.0 & 92.14 \\ 
+        16.0 & 77.86 \\ 
+        17.0 & 64.11 \\ 
+        18.0 & 48.53 \\ 
+        19.0 & 34.78 \\ 
+        20.0 & 22.06 \\ 
+        21.0 & 15.05 \\ 
+        22.0 & 13.49 \\ 
+        23.0 & 12.45 \\ 
+        23.9 & 11.93 \\ 
+        25.0 & 11.16 \\ 
+        \bottomrule
+    \end{tabular}
+    \caption{DFB 半导体激光器的 P-T 规律数据}
+    \label{tab:PT}
+\end{table}
+
+\subsection{测量 FP 和 DFB 半导体激光器光谱}
+
+\end{document}

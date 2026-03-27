@@ -49,7 +49,7 @@
 \section{实验过程及数据分析}
 
 \subsection{DFB 半导体激光器的 P-I 曲线}
-将 DFB 激光器的输出端使用光纤直接连接到光功率计上，调整驱动电流。先以 2.0 mA 为步长粗调，在根据粗调结果在部分区间内以 0.2 mA 为步长细调，测量并记录激光器的输出功率。保持温度为 $14^\circ\mathrm{C}$ 不变。测量结果如表 \ref{tab:PI}. 绘制 P-I 曲线如图 \ref{fig:PI}.
+将 DFB 激光器的输出端使用光纤直接连接到光功率计上，调整驱动电流。先以 2.0 mA 为步长粗调，在根据粗调结果在部分区间内以 0.2 mA 为步长细调，测量并记录激光器的输出功率。保持温度为 $14.0^\circ\mathrm{C}$ 不变。测量结果如表 \ref{tab:PI}. 绘制 P-I 曲线如图 \ref{fig:PI}.
 \begin{table}[H]
     \centering
     \begin{tabular}{cc|cc}
@@ -86,7 +86,7 @@
 
 
 \subsection{DFB 半导体激光器的 P-T 规律}
-固定驱动电流为 $10\text{ mA}$ 不变，调整温控电流源的温度调节旋钮，记录不同温度下的输出功率。测量结果如表 \ref{tab:PT}. 绘制 P-T 曲线如图 \ref{fig:PT}.
+固定驱动电流为 $10.0\text{ mA}$ 不变，调整温控电流源的温度调节旋钮，记录不同温度下的输出功率。测量结果如表 \ref{tab:PT}. 绘制 P-T 曲线如图 \ref{fig:PT}.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{images/P-T-curve.png}
@@ -118,6 +118,25 @@
     \label{tab:PT}
 \end{table}
 
-\subsection{测量 FP 和 DFB 半导体激光器光谱}
+\subsection{测量 DFB 和 FP 半导体激光器光谱}
+\subsubsection{DFB 激光器}
+将 DFB 激光器的输出端使用光纤直接连接到光谱仪上，调整驱动电流为 $10.0\text{ mA}$，分别调整温度为 $14.0^\circ\mathrm{C}$、$16.0^\circ\mathrm{C}$ 和 $20.0^\circ\mathrm{C}$，测量得光谱如图 \ref{fig:DFB-spectrum}. 发现随着温度的升高，激光器的峰值波长变长，输出功率变小，但谱线宽度基本不变。
+\subsubsection{FP 激光器}
+将 FP 激光器的输出端使用光纤直接连接到光谱仪上，调整驱动电流为 $10.0\text{ mA}$，温度为 $14.0^\circ\mathrm{C}$，测量得光谱如图 \ref{fig:FP-spectrum}. 发现 FP 激光器的光谱中存在多个峰值，且峰值之间间隔较为均匀，说明这些峰值对应于激光器腔内的不同纵模。整体包络呈高斯分布形状。
+\begin{figure}[H]
+    \centering
+    \subfigure[$14.0^\circ\mathrm{C}$，峰值：$1550.4160\text{ nm},-9.88\text{ dBm}$；3dB衰减宽度为$0.180\text{ nm}$]{\includegraphics[width=\linewidth]{images/DFB-spectrum-14.jpg}} \\
+    \subfigure[$16.0^\circ\mathrm{C}$，峰值：$1550.5920\text{ nm},-11.59\text{ dBm}$；3dB衰减宽度为$0.180\text{ nm}$]{\includegraphics[width=\linewidth]{images/DFB-spectrum-16.jpg}} \\
+    \subfigure[$20.0^\circ\mathrm{C}$，峰值：$1550.9220\text{ nm},-20.61\text{ dBm}$；3dB衰减宽度为$0.180\text{ nm}$]{\includegraphics[width=\linewidth]{images/DFB-spectrum-20.jpg}}
+    \caption{DFB 半导体激光器的光谱}
+    \label{fig:DFB-spectrum}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/FP-spectrum-14.jpg}
+    \vspace{-2em}
+    \caption{FP 半导体激光器的光谱，中心波长：1310.9360 nm，峰值：-7.75 dBm，平均纵模间隔：1.4270 nm}
+    \label{fig:FP-spectrum}
+\end{figure}
 
 \end{document}

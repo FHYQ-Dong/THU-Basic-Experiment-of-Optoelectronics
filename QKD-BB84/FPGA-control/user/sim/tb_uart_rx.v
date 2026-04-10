@@ -11,13 +11,13 @@ reg  uart_rx_in;
 wire [7:0] rx_data;
 wire       rx_valid;
 
-uart_rx #(
+uart_receiver #(
     .CLK_FREQ (CLK_FREQ),
     .BAUD_RATE(BAUD_RATE)
 ) dut (
     .clk     (clk),
     .rst   (rst),
-    .uart_rx (uart_rx_in),
+    .rxd     (uart_rx_in),
     .rx_data (rx_data),
     .rx_valid(rx_valid)
 );
@@ -48,10 +48,10 @@ integer errors;
 
 initial begin
     errors     = 0;
-    rst      = 0;
+    rst      = 1;
     uart_rx_in = 1;  // Idle high
     repeat(4) @(posedge clk);
-    rst = 1;
+    rst = 0;
     repeat(2) @(posedge clk);
 
     // Test 1: send 0xA5

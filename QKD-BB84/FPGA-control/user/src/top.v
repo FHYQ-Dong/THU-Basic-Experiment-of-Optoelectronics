@@ -2,10 +2,10 @@
 // Protocol: receive 1 byte, wait for sync edge, fire laser. Stop on 'q' (0x71).
 module top #(
     parameter CLK_FREQ          = 100_000_000,
-    parameter SYNC_FREQ         = 1_000_000,
-    parameter SYNC_PULSE_WIDTH  = 10,
+    parameter SYNC_FREQ         = 50_000,
+    parameter SYNC_PULSE_WIDTH  = 1000,
     parameter BAUD_RATE         = 115_200,
-    parameter LASER_PULSE_WIDTH = 10
+    parameter LASER_PULSE_WIDTH = 1000
 ) (
     input  wire       clk,
     input  wire       rst,
@@ -34,13 +34,13 @@ sync_gen #(
     .sync_out(sync_out)
 );
 
-uart_rx #(
+uart_receiver #(
     .CLK_FREQ (CLK_FREQ),
     .BAUD_RATE(BAUD_RATE)
 ) u_uart_rx (
     .clk     (clk),
     .rst     (rst),
-    .uart_rx (uart_rx),
+    .rxd     (uart_rx),
     .rx_data (rx_data),
     .rx_valid(rx_valid)
 );
@@ -76,7 +76,7 @@ localparam S_CHECK_Q   = 2'd1;
 localparam S_WAIT_SYNC = 2'd2;
 localparam S_STOPPED   = 2'd3;
 
-reg [1:0] state;
+(* fsm_encoding = "none" *) reg [1:0] state;
 reg [7:0] data_latch;
 
 always @(posedge clk) begin
@@ -116,7 +116,14 @@ always @(posedge clk) begin
     end
 end
 
-// LED on when stopped
-assign led_empty = (state == S_STOPPED);
+// DEBUG: latch rx_valid — LED stays on after first byte received
+reg dbg_rx_seen;
+always @(posedge clk) begin
+    if (rst)
+        dbg_rx_seen <= 0;
+    else if (rx_valid)
+        dbg_rx_seen <= 1;
+end
+assign led_empty = dbg_rx_seen;
 
 endmodule

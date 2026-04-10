@@ -49,11 +49,11 @@ reg [7:0] received;
 
 initial begin
     errors   = 0;
-    rst    = 0;
+    rst    = 1;
     tx_start = 0;
     tx_data  = 0;
     repeat(4) @(posedge clk);
-    rst = 1;
+    rst = 0;
     repeat(2) @(posedge clk);
 
     // ── Test 1: send 0xA5 ────────────────────────────────────────────────

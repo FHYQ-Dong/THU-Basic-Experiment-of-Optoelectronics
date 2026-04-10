@@ -15,8 +15,8 @@ module laser_ctrl #(
 localparam S_IDLE  = 1'd0;
 localparam S_DRIVE = 1'd1;
 
-reg                                   state;
-reg [$clog2(LASER_PULSE_WIDTH+1)-1:0] pulse_cnt;
+(* fsm_encoding = "none" *) reg       state;
+reg [15:0] pulse_cnt;
 reg [1:0]                             sel_latch;
 
 always @(posedge clk) begin
@@ -45,7 +45,7 @@ always @(posedge clk) begin
                     2'b10: laser <= 4'b0100;  // laser[2]: +45°
                     2'b11: laser <= 4'b1000;  // laser[3]: -45°
                 endcase
-                if (pulse_cnt == LASER_PULSE_WIDTH - 1) begin
+                if (pulse_cnt == LASER_PULSE_WIDTH) begin
                     laser <= 4'b0000;
                     busy  <= 0;
                     state <= S_IDLE;

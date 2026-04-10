@@ -1,0 +1,2 @@
+- [yosys FSM bug](feedback_yosys_fsm.md) — yosys 0.17 one-hot recoding breaks FSMs; use `(* fsm_encoding = "none" *)`
+- [Reset polarity](feedback_rst_polarity.md) — active-HIGH rst (rst=1 = reset) for all FPGA modules

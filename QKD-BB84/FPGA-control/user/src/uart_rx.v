@@ -1,12 +1,12 @@
 // UART receiver, 8N1
 // Outputs rx_data and a one-cycle rx_valid pulse when a byte is received
-module uart_rx #(
+module uart_receiver #(
     parameter CLK_FREQ = 100_000_000,  // System clock frequency (Hz)
     parameter BAUD_RATE = 115_200      // Baud rate
 ) (
     input  wire       clk,
     input  wire       rst,
-    input  wire       uart_rx,
+    input  wire       rxd,
     output reg  [7:0] rx_data,
     output reg        rx_valid
 );
@@ -19,15 +19,15 @@ localparam S_START = 2'd1;
 localparam S_DATA  = 2'd2;
 localparam S_STOP  = 2'd3;
 
-reg [1:0]               state;
-reg [$clog2(CLKS_PER_BIT)-1:0] baud_cnt;
+(* fsm_encoding = "none" *) reg [1:0] state;
+reg [15:0] baud_cnt;
 reg [2:0]               bit_idx;
 reg [7:0]               shift_reg;
 
 // Two-stage synchronizer for uart_rx input
 reg rx_sync0, rx_sync1;
 always @(posedge clk) begin
-    rx_sync0 <= uart_rx;
+    rx_sync0 <= rxd;
     rx_sync1 <= rx_sync0;
 end
 

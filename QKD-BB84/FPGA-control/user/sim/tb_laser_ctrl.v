@@ -44,12 +44,12 @@ integer errors;
 
 initial begin
     errors    = 0;
-    rst       = 0;
+    rst       = 1;
     fire      = 0;
     laser_sel = 0;
 
     repeat(4) @(posedge clk);
-    rst = 1;
+    rst = 0;
     repeat(2) @(posedge clk);
 
     // ── Test 1: Each encoding fires correct laser ─────────────────────────

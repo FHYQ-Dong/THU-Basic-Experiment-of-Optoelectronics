@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vvp prj/icarus/tb_uart_rx.vvp)",
+      "Bash(vvp prj/icarus/tb_laser_ctrl.vvp)",
+      "Bash(vvp prj/icarus/tb_top.vvp)",
+      "Bash(iverilog -o prj/icarus/tb_uart_tx.vvp user/sim/tb_uart_tx.v user/src/uart_tx.v)",
+      "Bash(timeout 15 vvp prj/icarus/tb_uart_tx.vvp)",
+      "Read(//d/Program/Coursework/THU-Basic-Experiment-of-Optoelectronics/QKD-BB84/**)",
+      "Bash(vvp prj/icarus/tb_uart_tx.vvp)"
+    ]
+  }
+}

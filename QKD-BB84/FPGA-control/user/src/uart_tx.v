@@ -20,7 +20,7 @@ localparam S_DATA  = 2'd2;
 localparam S_STOP  = 2'd3;
 
 reg [1:0]               state;
-reg [$clog2(CLKS_PER_BIT)-1:0] baud_cnt;
+reg [15:0] baud_cnt;
 reg [2:0]               bit_idx;
 reg [7:0]               shift_reg;
 

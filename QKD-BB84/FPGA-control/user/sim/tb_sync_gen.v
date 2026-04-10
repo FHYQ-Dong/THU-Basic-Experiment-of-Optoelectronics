@@ -30,9 +30,9 @@ integer measured_high, measured_period;
 
 initial begin
     errors = 0;
-    rst  = 0;
+    rst  = 1;
     repeat(4) @(posedge clk);
-    rst = 1;
+    rst = 0;
 
     // Align to first rising edge
     @(posedge sync_out);

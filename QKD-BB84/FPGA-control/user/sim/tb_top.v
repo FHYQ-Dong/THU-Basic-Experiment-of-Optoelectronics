@@ -58,9 +58,9 @@ integer errors;
 initial begin
     errors     = 0;
     uart_rx_in = 1;
-    rst        = 0;
+    rst        = 1;
     repeat(4) @(posedge clk);
-    rst = 1;
+    rst = 0;
     repeat(4) @(posedge clk);
 
     // ── Test 1: led_empty low at start (not stopped) ────────────────────

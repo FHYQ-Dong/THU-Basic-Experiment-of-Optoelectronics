@@ -12,7 +12,7 @@ module sync_gen #(
 
 localparam PERIOD = CLK_FREQ / SYNC_FREQ;  // Clock cycles per sync period
 
-reg [$clog2(PERIOD)-1:0] cnt;
+reg [31:0] cnt;
 
 always @(posedge clk) begin
     if (rst)

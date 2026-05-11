@@ -17,29 +17,31 @@ POLAR_MAPPING = {
 start_time = time.time()
 loop_cnt = 0
 
+datafile = open("random_data_10s.txt", "w")
+
 try:
     while True:
-        # q = input()
-        # if q.lower() == 'q':
-        #     ser.write(b'q')
-        #     ser.close()
-        #     break
-        # 生成 uint8: 0, 1, 2, 3 中的一个随机数
         random_number = random.randint(0, 3)
-        # print(f"POLOR: {POLAR_MAPPING[random_number]}")
-        # 将随机数转换为字节并发送到串口
+        # random_number = 0x02
         ser.write(random_number.to_bytes(1, byteorder='big'))
-        # 接收 32-bit 整数 (big-endian)
-        # received_data = ser.read(4)
-        # if len(received_data) == 4:
-        #     received_number = int.from_bytes(received_data, byteorder='big')
-        #     # print(f"SYNC: {received_number}")
-        # else:
-        #     # print("SYNC: ERROR")
+        datafile.write(f"{random_number} ")
         loop_cnt += 1
 except KeyboardInterrupt:
     end_time = time.time()
     ser.write(b'q')
     ser.close()
+    datafile.close()
     elapsed_time = end_time - start_time
     print(f"Total loops: {loop_cnt}, Elapsed time: {elapsed_time:.2f} seconds, Speed: {loop_cnt / elapsed_time:.2f} lps")
+
+# 0x00: 407.5 -> 225.2
+# 0x01: 453.2 -> 225.9
+# 0x02: 225.0 -> ok
+# 0x03: 565.0 -> 225.1
+
+# 63.6 + 45.5
+
+# 0 -> CH1 -> 0
+# 1 -> CH4 -> 3
+# 2 -> CH3 -> 2
+# 3 -> CH2 -> 1

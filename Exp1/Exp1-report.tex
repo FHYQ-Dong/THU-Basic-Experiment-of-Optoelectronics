@@ -1,0 +1,133 @@
+\documentclass[utf8,twocolumn]{ctexart}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usepackage{circuitikz}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{pdfpages}
+\usepackage{booktabs}
+\usepackage{subfigure}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+% math font
+\usepackage{mathrsfs}
+\usepackage{multirow}
+\usepackage{inputenc}
+\usepackage{fancyhdr}
+\usepackage{physics}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=black,
+    citecolor=black,
+}
+\geometry{a4paper, scale=0.8}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{电光调制}
+\rhead{无37~董皓彧~2023010659}
+\cfoot{---~~\thepage~~---}
+
+% 双栏间隔
+\setlength{\columnsep}{20pt}
+
+\title{电光调制及语音信号传输实验报告}
+\author{无37~董皓彧~2023010659}
+\date{\zhtoday}
+
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{实验过程及数据分析}
+
+\subsection{锥光干涉图}
+调整光路后在白屏上观察到单轴晶体锥光干涉图样，如图 \ref{fig:interfere} 所示。可见明暗相间的同心圆环和对称的暗十字，说明光束与晶体光轴平行且从晶体中心穿过。
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/1-Interfere-Cross.jpg}
+    \vspace{-2em}
+    \caption{LiNbO$_3$ 晶体锥光干涉图}
+    \label{fig:interfere}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/I-V-curve.png}
+    \vspace{-2em}
+    \caption{LiNbO$_3$ 晶体横向电光调制 I-V 曲线}
+    \label{fig:IV}
+\end{figure}
+
+\subsection{LiNbO$_3$ 晶体横向电光调制的直流调制曲线}
+在 LiNbO$_3$ 晶体上施加直流电压，测量经检偏器后的光强随电压的变化。测量结果如表 \ref{tab:IV}. 绘制 I-V 曲线如图 \ref{fig:IV}.
+\begin{table}[H]
+    \centering
+    \begin{tabular}{cc|cc}
+        \toprule
+        $V (\text{V})$ & $I (\mu\text{W})$ & $V (\text{V})$ & $I (\mu\text{W})$ \\
+        \midrule
+        0   & 3.280  & 305 & 97.76  \\
+        33  & 3.010  & 330 & 107.3  \\
+        62  & 5.666  & 363 & 118.0  \\
+        92  & 11.02  & 398 & 126.1  \\
+        127 & 20.57  & 406 & 129.6  \\
+        154 & 30.00  & 419 & 129.0  \\
+        181 & 40.83  & 425 & 131.9  \\
+        211 & 53.56  & 436 & 132.6  \\
+        239 & 66.96  & 440 & 133.9  \\
+        270 & 80.16  & 444 & 132.6  \\
+            &        & 455 & 129.3  \\
+            &        & 478 & 127.0  \\
+            &        & 503 & 122.3  \\
+        \bottomrule
+    \end{tabular}
+    \caption{LiNbO$_3$ 晶体横向电光调制 I-V 数据}
+    \label{tab:IV}
+\end{table}
+通过对数据进行非线性拟合，得到
+\begin{equation}
+    I = 65.0\left[1 - \cos\!\left(\frac{\pi V}{458.6}\right)\right] + 3.28 \quad (\mu\text{W})
+\end{equation}
+即半波电压 $V_\pi \approx 458.6$ V。从曲线峰值位置可以验证此结果，峰值出现在 $V \approx 440$ V 附近，与拟合值基本一致。
+
+\subsection{正弦波电压调制}
+
+\subsubsection{同频线性输出}
+在偏置点 $\varphi_D = \pm\pi/2$ 处施加小幅正弦信号，观察输出波形与输入波形的关系。示波器截图如图 \ref{fig:sinmod}.
+当通过 $1/4$ 波片使 $\varphi_D = \pi/2$ 时，输出与输入同频同相（相移 $6.6^\circ \approx 0^\circ$）；当 $\varphi_D = -\pi/2$ 时，输出与输入同频反相（相移 $179.0^\circ \approx 180^\circ$，$-177.1^\circ \approx -180^\circ$）。两次反相测量对应于 $1/4$ 波片的不同调整位置。实验结果与理论预测一致。
+
+\subsubsection{倍频输出}
+当 $\varphi_D = 0$ 或 $\pi$（不加 $1/4$ 波片或将波片调整至相应位置）时，输出频率为输入频率的两倍。示波器截图如图 \ref{fig:2xfreq}. 由示波器波形可见，输出信号（绿色）的频率恰好为输入信号（黄色）的两倍，与理论分析一致。
+
+
+\subsection{语音信号调制}
+将 MP3 信号输入电光晶体驱动器，经放大后驱动电光晶体，而后接入扬声器输出。输出的声音原音乐相比有略微失真，但基本不影响音乐的识别度。
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/3-b-2xfreq.jpg}
+    \vspace{-2em}
+    \caption{正弦波电压调制——倍频输出，输出（绿色）频率为输入（黄色）的两倍}
+    \label{fig:2xfreq}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \subfigure[相移 $6.6^\circ$，同频同相，$\varphi_D = \pi/2$]{\includegraphics[width=\linewidth]{images/3-a-phase-shift-6.6.jpg}} \\
+    \subfigure[相移 $179.0^\circ$，同频反相，$\varphi_D = -\pi/2$]{\includegraphics[width=\linewidth]{images/3-a-phase-shift-179.0.jpg}} \\
+    \subfigure[相移 $-177.1^\circ$，同频反相，$\varphi_D = -\pi/2$]{\includegraphics[width=\linewidth]{images/3-a-phase-shift--177.1.jpg}}
+    \caption{正弦波电压调制——同频线性输出}
+    \label{fig:sinmod}
+\end{figure}
+
+
+\onecolumn
+\section{预习报告}
+\includepdf[pages=-]{images/预习报告-电光调制及语音信号传输.pdf}
+
+\end{document}

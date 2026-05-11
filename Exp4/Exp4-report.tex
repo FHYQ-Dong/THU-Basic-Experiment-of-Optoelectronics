@@ -1,0 +1,203 @@
+\documentclass[utf8,twocolumn]{ctexart}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usepackage{circuitikz}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{pdfpages}
+\usepackage{booktabs}
+\usepackage{subfigure}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+% math font
+\usepackage{mathrsfs}
+\usepackage{multirow}
+\usepackage{inputenc}
+\usepackage{fancyhdr}
+\usepackage{physics}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=black,
+    citecolor=black,
+}
+\geometry{a4paper, scale=0.8}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{波分复用}
+\rhead{无37~董皓彧~2023010659}
+\cfoot{---~~\thepage~~---}
+
+% 双栏间隔
+\setlength{\columnsep}{20pt}
+
+\title{波分复用光纤传输系统实验报告}
+\author{无37~董皓彧~2023010659}
+\date{\zhtoday}
+
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{实验过程及数据分析}
+
+\subsection{点到点光纤通信系统}
+分别使用 1310 nm 和 1550 nm 光源，测量发射功率和接收灵敏度，结果如表~\ref{tab:p2p}.
+
+\begin{table}[H]
+    \centering
+    \caption{点到点光纤通信系统测量数据}
+    \label{tab:p2p}
+    \begin{tabular}{ccc}
+        \toprule
+        波长 (nm) & 发射功率 (dBm) & 接收灵敏度 (dBm) \\
+        \midrule
+        1310 & $-6.20$ & $-36.50$ \\
+        1550 & $-2.92$ & $-34.45$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+已知光纤衰减系数：1550 nm 为 0.2 dB/km，1310 nm 为 0.35 dB/km。系统余量等于发射功率与接收灵敏度之差，最大传输距离等于系统余量除以光纤衰减系数。
+
+对于 1310 nm：
+\begin{equation}
+    M_{1310} = -6.20 - (-36.50) = 30.30 \text{ dB}
+\end{equation}
+\begin{equation}
+    L_{1310} = \frac{30.30}{0.35} \approx 86.6 \text{ km}
+\end{equation}
+
+对于 1550 nm：
+\begin{equation}
+    M_{1550} = -2.92 - (-34.45) = 31.53 \text{ dB}
+\end{equation}
+\begin{equation}
+    L_{1550} = \frac{31.53}{0.2} \approx 157.7 \text{ km}
+\end{equation}
+
+可见 1550 nm 波长由于光纤衰减系数更低，最大传输距离远大于 1310 nm.
+
+\subsection{视频光纤传输}
+使用光纤传输视频信号，接收端监视器上可清晰观察到实时视频画面，如图~\ref{fig:video} 所示，说明视频信号可通过光纤正常传输。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{images/2-video-trans.jpg}
+    \vspace{-2em}
+    \caption{视频光纤传输接收画面}
+    \label{fig:video}
+\end{figure}
+
+\subsection{双波长 WDM 传输系统}
+分别测量两个 WDM 器件各端口在不同波长下的插入损耗。WDM-1 有三个端口：1550、1310、In/Out；WDM-2 有三个端口：1550、1310、In。测量结果如表~\ref{tab:wdm1} 和表~\ref{tab:wdm2}.
+
+\begin{table}[H]
+    \centering
+    \caption{WDM-1 插入损耗}
+    \label{tab:wdm1}
+    \begin{tabular}{cccc}
+        \toprule
+        波长 (nm) & 输入端口 & 输出端口 & 插损 (dB) \\
+        \midrule
+        1550 & 1550 & In/Out & 3.36 \\
+        1310 & 1310 & In/Out & 6.39 \\
+        1310 & In/Out & 1310 & 6.62 \\
+        1550 & In/Out & 1550 & 3.28 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{WDM-2 插入损耗}
+    \label{tab:wdm2}
+    \begin{tabular}{cccc}
+        \toprule
+        波长 (nm) & 输入端口 & 输出端口 & 插损 (dB) \\
+        \midrule
+        1550 & 1550 & In & 7.31 \\
+        1310 & 1310 & In & 0.45 \\
+        1310 & In & 1310 & 7.03 \\
+        1550 & In & 1550 & 5.95 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+利用上述插损数据，计算 WDM 系统在同向传输和双向传输两种方案下的最大传输距离。
+
+\subsubsection{同向传输}
+两路波长信号沿同一方向传输，每路信号经过一个 WDM 作为复用器、另一个 WDM 作为解复用器。
+
+对于 1550 nm，WDM 总插损为：
+\begin{equation}
+    \alpha_{\text{WDM},1550} = 3.36 + 5.95 = 9.31 \text{ dB}
+\end{equation}
+剩余余量为 $31.53 - 9.31 = 22.22$ dB，最大传输距离为：
+\begin{equation}
+    L = \frac{22.22}{0.2} \approx 111.1 \text{ km}
+\end{equation}
+
+对于 1310 nm，WDM 总插损为：
+\begin{equation}
+    \alpha_{\text{WDM},1310} = 6.39 + 7.03 = 13.42 \text{ dB}
+\end{equation}
+剩余余量为 $30.30 - 13.42 = 16.88$ dB，最大传输距离为：
+\begin{equation}
+    L = \frac{16.88}{0.35} \approx 48.2 \text{ km}
+\end{equation}
+
+\subsubsection{双向传输}
+两路波长信号沿相反方向传输。
+
+对于 1550 nm（从 WDM-1 侧到 WDM-2 侧），WDM 总插损为：
+\begin{equation}
+    \alpha_{\text{WDM},1550} = 3.36 + 5.95 = 9.31 \text{ dB}
+\end{equation}
+剩余余量为 $31.53 - 9.31 = 22.22$ dB，最大传输距离为：
+\begin{equation}
+    L = \frac{22.22}{0.2} \approx 111.1 \text{ km}
+\end{equation}
+
+对于 1310 nm（从 WDM-2 侧到 WDM-1 侧），WDM 总插损为：
+\begin{equation}
+    \alpha_{\text{WDM},1310} = 0.45 + 6.62 = 7.07 \text{ dB}
+\end{equation}
+剩余余量为 $30.30 - 7.07 = 23.23$ dB，最大传输距离为：
+\begin{equation}
+    L = \frac{23.23}{0.35} \approx 66.4 \text{ km}
+\end{equation}
+
+汇总各方案下的最大传输距离如表~\ref{tab:summary}.
+
+\begin{table}[H]
+    \centering
+    \caption{WDM 系统最大传输距离汇总}
+    \label{tab:summary}
+    \begin{tabular}{cccc}
+        \toprule
+        方案 & 波长 (nm) & 插损 (dB) & 距离 (km) \\
+        \midrule
+        \multirow{2}{*}{同向传输} & 1550 & 9.31 & 111.1 \\
+         & 1310 & 13.42 & 48.2 \\
+        \midrule
+        \multirow{2}{*}{双向传输} & 1550 & 9.31 & 111.1 \\
+         & 1310 & 7.07 & 66.4 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+由上表可见，双向传输方案下 1310 nm 的传输距离优于同向传输方案，这是因为双向传输时 1310 nm 信号经过的 WDM 端口插损更小（WDM-2 的 1310 端口插损仅 0.45 dB）。1550 nm 在两种方案下传输距离相同。总体而言，系统的最大传输距离受限于插损较大的波长通道。
+
+\onecolumn
+\section{预习报告}
+\includepdf[pages=-]{images/预习报告-波分复用光纤传输系统.pdf}
+
+\end{document}

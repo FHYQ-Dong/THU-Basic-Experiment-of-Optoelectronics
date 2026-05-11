@@ -1,0 +1,82 @@
+\documentclass[utf8,twocolumn]{ctexart}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usepackage{circuitikz}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{pdfpages}
+\usepackage{booktabs}
+\usepackage{subfigure}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathrsfs}
+\usepackage{multirow}
+\usepackage{inputenc}
+\usepackage{fancyhdr}
+\usepackage{physics}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=black,
+    citecolor=black,
+}
+\geometry{a4paper, scale=0.8}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{全息光栅}
+\rhead{无37~董皓彧~2023010659}
+\cfoot{---~~\thepage~~---}
+\setlength{\columnsep}{20pt}
+
+\title{全息光栅实验报告}
+\author{无37~董皓彧~2023010659}
+\date{\zhtoday}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{实验过程及数据分析}
+
+\subsection{扩束平行光}
+
+搭建扩束准直光路，使用25倍显微物镜作为扩束镜，大口径凸透镜作为准直镜，两透镜共焦放置。使用平行平晶检验平行度，观察到反射方向的干涉条纹较宽，如图~\ref{fig:parallel}~所示，说明输出光束具有良好的平行性。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/1-平行光晶检测干涉条纹.jpg}
+    \caption{平行平晶检测干涉条纹}
+    \label{fig:parallel}
+\end{figure}
+
+\subsection{全息光栅干涉条纹}
+
+搭建马赫-曾德（M-Z）干涉仪合光光路，按照设计目标 $U = 28$ 条/mm 调节光路。在显微镜下观察到清晰的等间距平行干涉条纹，如图~\ref{fig:fringes}~所示。条纹间距均匀，对比度良好，可用于制作全息光栅。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/2-MZ干涉器后干涉条纹.jpg}
+    \caption{M-Z 干涉仪输出干涉条纹}
+    \label{fig:fringes}
+\end{figure}
+
+受限于实验时间，未调节两束光夹角为 $\theta = 1^\circ$，因此实际干涉条纹间距可能不准。
+
+\subsection{全息光栅衍射图样}
+
+由于本次实验时间限制，未能完成全息干板的曝光显影及衍射图样的观测。根据理论分析，使用 $d \approx 36.3$ \textmu m 的全息光栅，He-Ne 激光（$\lambda = 632.8$ nm）的一级衍射角为
+\begin{equation}
+    \alpha_1 = \arcsin\!\left(\frac{\lambda}{d}\right) = \arcsin\!\left(\frac{632.8}{36300}\right) \approx 1.0^\circ
+\end{equation}
+
+\onecolumn
+\section{预习报告}
+\includepdf[pages=-]{images/预习报告-全息光栅.pdf}
+
+\end{document}

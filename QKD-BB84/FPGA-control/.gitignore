@@ -2,3 +2,6 @@
 prj/
 vivado_pid*
 **/.DS_Store
+
+# vivado
+dfx_runtime.txt

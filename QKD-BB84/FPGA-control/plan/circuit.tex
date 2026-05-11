@@ -1,0 +1,43 @@
+\documentclass[border=10pt]{standalone}
+\usepackage{circuitikz}
+\usepackage{amsmath}
+
+\begin{document}
+\begin{circuitikz}[american, thick]
+
+% Op-amp (LF353)
+\draw (0,0) node[op amp, noinv input up] (opamp) {};
+\node[right, font=\footnotesize] at (opamp.up) {LF353};
+
+% Op-amp power supply
+\draw (opamp.up) ++(-0.1,0) -- ++(0,0.5) node[vcc] {$V_{cc}{=}{+}12\,\mathrm{V}$};
+\draw (opamp.down) ++(-0.1,0) -- ++(0,-0.5) node[vee] {$-V_{cc}{=}{-}12\,\mathrm{V}$};
+
+% Bypass cap on -Vcc
+\draw (opamp.down) ++(-0.1,-0.5) to[C, l_=$C_1$, *-] ++(-1.5,0) node[ground] {};
+
+% Output of op-amp to "out" (monitor) and through 100 ohm to MOSFET gate
+\draw (opamp.out) -- ++(0.5,0) coordinate (opout);
+\draw (opout) |- ++(0.5,1.5) node[right] {out};
+\draw (opout) to[R, l=$100\,\Omega$, -*] ++(2,0) coordinate (gate);
+
+% N-MOSFET
+\draw (gate) ++(1.2,-1.5) node[nmos, anchor=gate] (mos) {};
+\draw (gate) -- (mos.gate);
+\node[right, font=\footnotesize] at (mos.base) {N-MOS};
+
+% Laser diode: VDD -> Laser Diode -> Drain
+\draw (mos.drain) -- ++(0,1) coordinate (ld_bottom);
+\draw (ld_bottom) to[leD, l=$\mathrm{LD}$] ++(0,1.5) -- ++(0,0.5) node[vcc] {$V_{DD}{=}5\,\mathrm{V}$};
+
+% Source to sense resistor to GND
+\draw (mos.source) to[R, l_=$R_s$] ++(0,-2) node[ground] {};
+
+% Feedback from source to inverting input
+\draw (mos.source) ++(0,0) to[short, *-] ++(-2,0) |- (opamp.-);
+
+% Non-inverting input: IN
+\draw (opamp.+) -- ++(-1,0) node[left] {IN};
+
+\end{circuitikz}
+\end{document}

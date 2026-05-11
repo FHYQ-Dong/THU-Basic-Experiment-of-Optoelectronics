@@ -1,0 +1,13 @@
+graph LR
+    UART_IN["uart_rx<br/>(串口输入)"] --> UART["uart_rx.v<br/>UART接收器"]
+
+    UART -->|"rx_valid<br/>rx_data[7:0]"| TOP["top.v 主控FSM<br/>WAIT_RX → CHECK_Q<br/>→ WAIT_SYNC → STOPPED"]
+
+    SYNC["sync_gen.v<br/>同步信号发生器"] -->|"sync_rise"| TOP
+    SYNC --> SYNC_PIN["sync_out<br/>(至TCSPC)"]
+
+    TOP -->|"fire<br/>laser_sel[1:0]"| LASER["laser_ctrl.v<br/>激光器控制器"]
+
+    LASER --> LASER_PIN["laser[3:0]<br/>(4路激光器)"]
+    LASER --> LASER_EN["laser_en"]
+    TOP --> LED["led_empty"]

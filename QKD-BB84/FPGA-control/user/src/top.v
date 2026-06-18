@@ -4,7 +4,7 @@ module top #(
     parameter CLK_FREQ          = 100_000_000,
     parameter SYNC_FREQ         = 50_000,
     parameter SYNC_PULSE_WIDTH  = 1000,
-    parameter BAUD_RATE         = 115_200,
+    parameter BAUD_RATE         = 250_000,
     parameter LASER_PULSE_WIDTH = 1000
 ) (
     input  wire       clk,
